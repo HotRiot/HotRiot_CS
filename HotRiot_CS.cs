@@ -1,7 +1,6 @@
 ﻿// HMAC Authentication Info: http://jokecamp.wordpress.com/2012/10/21/examples-of-creating-base64-hashes-using-hmac-sha256-in-different-languages/
 using System;
 using System.Collections.Specialized;
-using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using Newtonsoft.Json.Linq;
@@ -12,6 +11,7 @@ namespace HotRiot_CS
     public sealed class HotRiot : defines
     {
         private static HotRiot HRInstance = new HotRiot();
+        private static string PROTOCOL = "https://";
 
         private string fullyQualifiedHRDAURL;
         private string fullyQualifiedHRURL;
@@ -20,7 +20,7 @@ namespace HotRiot_CS
 
         private HotRiot(){}
 
-        private static HotRiot getHotRiotInstance
+        internal static HotRiot getHotRiotInstance
         {
             get
             {
@@ -28,7 +28,7 @@ namespace HotRiot_CS
             }
         }
 
-        private HotRiotJSON postLink(string link)
+        internal HotRiotJSON postLink(string link)
         {
             WebResponse webResponse = null;
             Stream requestStream = null;
@@ -110,7 +110,7 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
-        private HotRiotJSON postRequest(string url, NameValueCollection nvc, NameValueCollection files)
+        internal HotRiotJSON postRequest(string url, NameValueCollection nvc, NameValueCollection files)
         {
             WebResponse webResponse = null;
             FileStream fileStream = null;
@@ -134,7 +134,7 @@ namespace HotRiot_CS
                 byte[] boundarybytes = System.Text.Encoding.UTF8.GetBytes("\r\n--" + boundary + "\r\n");
                 string formdataTemplate = "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
 
-                foreach (string key in nvc.Keys)
+                foreach(string key in nvc.Keys)
                 {
                     string formitem = string.Format(formdataTemplate, key, nvc[key]);
                     byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
@@ -149,7 +149,7 @@ namespace HotRiot_CS
                 {
                     byte[] buffer = new byte[4096];
 
-                    foreach (string key in files.Keys)
+                    foreach(string key in files.Keys)
                     {
                         string header = string.Format(headerTemplate, key, files[key]);
                         byte[] headerbytes = System.Text.Encoding.UTF8.GetBytes(header);
@@ -258,26 +258,17 @@ namespace HotRiot_CS
             return base64Message;
         }
 
-        private bool isActionValid(HotRiotJSON jsonResponse, string validAction )
-        {
-            string action = getAction(jsonResponse);
-            if(action != null && action.Equals(validAction) == true)
-                    return true;
-
-            return false;
-        }
-
         private HotRiotJSON processResponse(string unprocessedJsonResponse)
         {
-            HotRiotJSON hotriotJSON = new HotRiotJSON( JObject.Parse(unprocessedJsonResponse) );
+            HotRiotJSON hotriotJSON = new HotRiotJSON(JObject.Parse(unprocessedJsonResponse));
             setSession(hotriotJSON);
             return hotriotJSON;
         }
 
         private void setSession(HotRiotJSON jsonResponse)
         {
-            String sessionID = getGeneralInfoString( jsonResponse, "sessionID" );
-            if (sessionID != null )
+            String sessionID = getGeneralInfoString(jsonResponse, "sessionID");
+            if (sessionID != null)
                 jSessionID = ";jsessionid=" + sessionID;
         }
 
@@ -288,115 +279,79 @@ namespace HotRiot_CS
                 return processDataString(jsonResponse["generalInformation"][field].ToString());
             }
             catch (NullReferenceException doNothing) { }
-
-            return null;
-        }
-
-        private string getSubscriptionInfoString(HotRiotJSON jsonResponse, string field)
-        {
-            try
-            {
-                return processDataString(jsonResponse["subscriptionDetails"][field].ToString());
-            }
-            catch (NullReferenceException doNothing) { }
-
-            return null;
-        }
-
-        private int getSubscriptionInfoInteger(HotRiotJSON jsonResponse, string field)
-        {
-            try
-            {
-                return (int)jsonResponse["subscriptionDetails"][field];
-            }
-            catch (NullReferenceException doNothing) { }
-
-            return 0;
-        }
-
-        private string getSubscriptionPaymentInfoString(HotRiotJSON jsonResponse, string field)
-        {
-            try
-            {
-                return processDataString(jsonResponse["subscriptionPaymentInfo"][field].ToString());
-            }
-            catch (NullReferenceException doNothing) { }
-
-            return null;
-        }
-
-        private int getSubscriptionPaymentInfoInteger(HotRiotJSON jsonResponse, string field)
-        {
-            try
-            {
-                return (int)jsonResponse["subscriptionPaymentInfo"][field];
-            }
-            catch (NullReferenceException doNothing) { }
-
-            return 0;
-        }
-
-        private bool getGeneralInfoBool(HotRiotJSON jsonResponse, string field)
-        {
-            try
-            {
-                return (bool)jsonResponse["generalInformation"][field];
-            }
-            catch (NullReferenceException doNothing) { }
-
-            return false;
-        }
-
-        private int getGeneralInfoInteger(HotRiotJSON jsonResponse, string field)
-        {
-            try
-            {
-                return (int)jsonResponse["generalInformation"][field];
-            }
-            catch (NullReferenceException doNothing) { }
-
-            return 0;
-        }
-
-        private string[] getGeneralInfoArray(HotRiotJSON jsonResponse, string field)
-        {
-            string[] retArray = null;
-
-            try
-            {
-                string jsonField = getGeneralInfoString(jsonResponse, field);
-                JArray fieldJArray = JArray.Parse(jsonField);
-
-                retArray = new string[fieldJArray.Count];
-                for(int i=0; i<fieldJArray.Count; i++)
-                    retArray[i] = (String)fieldJArray[i];
-            }
-            catch (NullReferenceException doNothing) { }
             catch (ArgumentNullException doNothing) { }
-            catch (Exception doNothing) { }
 
-            return retArray;
+            return null;
         }
 
-        private string[] getGeneralInfoArray(HotRiotJSON jsonResponse, string field, int index)
+        private string processDataString(string data)
         {
-            string[] retArray = null;
+            if (data != null)
+                if (data.Length == 0)
+                    data = null;
 
-            try
-            {
-                string jsonField = getGeneralInfoString(jsonResponse, field);
-                JArray fieldJArray = JArray.Parse(jsonField);
-                fieldJArray = JArray.Parse(fieldJArray[index].ToString());
+            return data;
+        }
 
-                retArray = new string[fieldJArray.Count];
-                for (int i = 0; i < fieldJArray.Count; i++)
-                    retArray[i] = (String)fieldJArray[i];
-            }
-            catch (NullReferenceException doNothing) { }
-            catch (ArgumentNullException doNothing) { }
-            catch (Exception doNothing) { }
+        // ------------------------------------ INITIALIZE HOTRIOT ------------------------------------
+        public static HotRiot init(string appName)
+        {
+            HotRiot hotriot = HotRiot.getHotRiotInstance;
 
-            return retArray;
+            hotriot.fullyQualifiedHRDAURL = PROTOCOL + appName + ".k222.info/da";
+            hotriot.fullyQualifiedHRURL = PROTOCOL + appName + ".k222.info/process";
+
+            return hotriot;
+        }
+
+        // ----------------------------------- ACTION OPERATIONS ------------------------------------
+        public HRInsertResponse submitRecord(string databaseName, NameValueCollection recordData, NameValueCollection files)
+        {
+            recordData.Add("hsp-formname", databaseName);
+            return new HRInsertResponse(postRequest(fullyQualifiedHRURL, recordData, files));
+        }
+
+        public HRInsertResponse submitUpdateRecord(string databaseName, string recordID, string updatePassword, NameValueCollection recordData, NameValueCollection files)
+        {
+            recordData.Add("hsp-formname", databaseName);
+            recordData.Add("hsp-json", updatePassword);
+            recordData.Add("hsp-recordID", recordID);
+            return new HRInsertResponse(postRequest(fullyQualifiedHRURL, recordData, files));
+        }
+
+        public HRSearchResponse submitSearch(string searchName, NameValueCollection searchCriterion)
+        {
+            searchCriterion.Add("hsp-formname", searchName);
+            return new HRSearchResponse(postRequest(fullyQualifiedHRURL, searchCriterion, null));
+        }
+
+        public HRLoginResponse submitLogin(string loginName, NameValueCollection loginCredentials)
+        {
+            loginCredentials.Add("hsp-formname", loginName);
+            return new HRLoginResponse(postRequest(fullyQualifiedHRURL, loginCredentials, null));
+        }
+
+        public HRNotificationResponse submitNotification(string databaseName, NameValueCollection notificationData)
+        {
+            notificationData.Add("hsp-formname", databaseName);
+            notificationData.Add("hsp-rtninsert", "1");
+            return new HRNotificationResponse(postRequest(fullyQualifiedHRURL, notificationData, null));
+        }
+
+        public HRLoginLookupResponse submitLostLoginLookup(string loginName, NameValueCollection loginLookupData)
+        {
+            loginLookupData.Add("hsp-formname", loginName);
+            return new HRLoginLookupResponse(postRequest(fullyQualifiedHRURL, loginLookupData, null));
+        }
+
+        public HRRecordCountResponse submitRecordCount(NameValueCollection recordCountObject)
+        {
+            return new HRRecordCountResponse(submitRecordCount(recordCountObject, "false"));
+        }
+
+        public HRRecordCountResponse submitRecordCountSLL(NameValueCollection recordCountObject)
+        {
+            return new HRRecordCountResponse(submitRecordCount(recordCountObject, "true"));
         }
 
         private HotRiotJSON submitRecordCount(NameValueCollection recordCountObject, string sll)
@@ -408,47 +363,210 @@ namespace HotRiot_CS
             return postRequest(fullyQualifiedHRURL, recordCountObject, null);
         }
 
-        private bool isValidRecordNumber( int recordNumber, HotRiotJSON jsonResponse)
+        public HRLogoutResponse submitLogout(NameValueCollection logoutOptions)
         {
-            if( recordNumber > 0 )
-                if (recordNumber <= getGeneralInfoInteger(jsonResponse, "recordCount") )
+            string callbackData = null;
+
+            if (logoutOptions != null)
+                if (logoutOptions["hsp-callbackdata"] != null)
+                    callbackData = "&hsp-callbackdata=" + logoutOptions["hsp-callbackdata"];
+
+            return new HRLogoutResponse(postLink(fullyQualifiedHRDAURL + "?hsp-logout=hsp-json" + callbackData));
+
+        }
+    }
+
+    public class HRResponse : HotRiotJSON
+    {
+        public HRResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+
+        private bool isActionValid(string validAction)
+        {
+            string action = getAction();
+            if(action != null && action.Equals(validAction) == true)
                     return true;
 
             return false;
         }
 
-        private string getFieldDataString( int recordNumber, string dbFieldName, HotRiotJSON jsonResponse )
+        private string getGeneralInfoString(string field)
         {
             try
             {
-                string finalRecordNumber = "record_" + recordNumber;
-                return processDataString(jsonResponse["recordData"][finalRecordNumber]["fieldData"][dbFieldName].ToString());
+                return processDataString(this["generalInformation"][field].ToString());
             }
             catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
 
             return null;
         }
 
-        private string getRecordDataString(int recordNumber, string recordDataName, HotRiotJSON jsonResponse)
+        private string getSubscriptionInfoString(string field)
         {
             try
             {
-                string finalRecordNumber = "record_" + recordNumber;
-                return processDataString(jsonResponse["recordData"][finalRecordNumber][recordDataName].ToString());
+                return processDataString(this["subscriptionDetails"][field].ToString());
             }
             catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
 
             return null;
         }
 
-        private string getSubscriptionPaymentInfoString(int recordNumber, string fieldName, HotRiotJSON jsonResponse)
+        private int getSubscriptionInfoInteger(string field)
+        {
+            try
+            {
+                return (int)this["subscriptionDetails"][field];
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return 0;
+        }
+
+        private string getSubscriptionPaymentInfoString(string field)
+        {
+            try
+            {
+                return processDataString(this["subscriptionPaymentInfo"][field].ToString());
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return null;
+        }
+
+        private int getSubscriptionPaymentInfoInteger(string field)
+        {
+            try
+            {
+                return (int)this["subscriptionPaymentInfo"][field];
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return 0;
+        }
+
+        private bool getGeneralInfoBool(string field)
+        {
+            try
+            {
+                return (bool)this["generalInformation"][field];
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return false;
+        }
+
+        private int getGeneralInfoInteger(string field)
+        {
+            try
+            {
+                return (int)this["generalInformation"][field];
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing){ }
+
+            return 0;
+        }
+
+        private string[] getGeneralInfoArray(string field)
+        {
+            string[] retArray = null;
+
+            try
+            {
+                string jsonField = getGeneralInfoString(field);
+                if (jsonField != null)
+                {
+                    JArray fieldJArray = JArray.Parse(jsonField);
+
+                    retArray = new string[fieldJArray.Count];
+                    for (int i = 0; i < fieldJArray.Count; i++)
+                        retArray[i] = (String)fieldJArray[i];
+                }
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+            catch (Exception doNothing) { }
+
+            return retArray;
+        }
+
+        private string[] getGeneralInfoArray(string field, int index)
+        {
+            string[] retArray = null;
+
+            try
+            {
+                string jsonField = getGeneralInfoString(field);
+                if (jsonField != null)
+                {
+                    JArray fieldJArray = JArray.Parse(jsonField);
+                    fieldJArray = JArray.Parse(fieldJArray[index].ToString());
+
+                    retArray = new string[fieldJArray.Count];
+                    for (int i = 0; i < fieldJArray.Count; i++)
+                        retArray[i] = (String)fieldJArray[i];
+                }
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+            catch (Exception doNothing) { }
+
+            return retArray;
+        }
+
+        private bool isValidRecordNumber( int recordNumber)
+        {
+            if( recordNumber > 0 )
+                if (recordNumber <= getGeneralInfoInteger("recordCount") )
+                    return true;
+
+            return false;
+        }
+
+        private string getFieldDataString( int recordNumber, string dbFieldName)
+        {
+            try
+            {
+                string finalRecordNumber = "record_" + recordNumber;
+                return processDataString(this["recordData"][finalRecordNumber]["fieldData"][dbFieldName].ToString());
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return null;
+        }
+
+        private string getRecordDataString(int recordNumber, string recordDataName)
+        {
+            try
+            {
+                string finalRecordNumber = "record_" + recordNumber;
+                return processDataString(this["recordData"][finalRecordNumber][recordDataName].ToString());
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return null;
+        }
+
+        private string getSubscriptionPaymentInfoString(int recordNumber, string fieldName)
         {
             try
             {
                 string finalRecordNumber = "payment_" + recordNumber;
-                return processDataString(jsonResponse["subscriptionPaymentInfo"][finalRecordNumber][fieldName].ToString());
+                return processDataString(this["subscriptionPaymentInfo"][finalRecordNumber][fieldName].ToString());
             }
             catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
 
             return null;
         }
@@ -462,13 +580,13 @@ namespace HotRiot_CS
             return data;
         }
 
-        private FieldInfo getDatabaseFieldInfo(int recordNumber, string fieldName, string databaseName, HotRiotJSON jsonResponse)
+        private FieldInfo getDatabaseFieldInfo(int recordNumber, string fieldName, string databaseName)
         {
             string dbFieldName = databaseName + "::" + fieldName;
 
             string jFieldInfoString = null;
             FieldInfo recordInfo = null;
-            if ((jFieldInfoString = getFieldDataString(recordNumber, dbFieldName, jsonResponse)) != null)
+            if ((jFieldInfoString = getFieldDataString(recordNumber, dbFieldName)) != null)
             {
                 JObject jFieldInfo = JObject.Parse(jFieldInfoString);
                 recordInfo = new FieldInfo();
@@ -512,31 +630,31 @@ namespace HotRiot_CS
             return false;
         }
 
-        private string getJoinRecordSystemFieldData(int recordNumber, string systemFieldName, string databaseName, HotRiotJSON jsonResponse)
+        private string getJoinRecordSystemFieldData(int recordNumber, string systemFieldName, string databaseName)
         {
             string fieldData = null;
 
             string dbFieldName = databaseName + "::" + systemFieldName;
 
-            if( isValidRecordNumber(recordNumber, jsonResponse) == true )
-                fieldData = getFieldDataString(recordNumber, dbFieldName, jsonResponse);
+            if( isValidRecordNumber(recordNumber) == true )
+                fieldData = getFieldDataString(recordNumber, dbFieldName);
 
             return fieldData;
         }
 
-        private DatabaseRecord getTriggerRecordInfo(int recordNumber, string triggerDatabaseName, HotRiotJSON jsonResponse)
+        private DatabaseRecord getTriggerRecordInfo(int recordNumber, string triggerDatabaseName)
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber, jsonResponse) == true )
+            if( isValidRecordNumber(recordNumber) == true )
             {
-                var triggerDatabaseFieldNames = getTriggerFieldNames(triggerDatabaseName, jsonResponse);
+                var triggerDatabaseFieldNames = getTriggerFieldNames(triggerDatabaseName);
                 if( triggerDatabaseFieldNames != null && triggerDatabaseFieldNames.Length > 0)
                 {
                     databaseRecord = new DatabaseRecord( triggerDatabaseFieldNames.Length );
 
                     for(int i=0; i<triggerDatabaseFieldNames.Length; i++)
-                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, triggerDatabaseFieldNames[i], triggerDatabaseName, jsonResponse) );
+                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, triggerDatabaseFieldNames[i], triggerDatabaseName) );
                 }
             }
 
@@ -545,330 +663,270 @@ namespace HotRiot_CS
 
 /********************************************* PUBLIC API *********************************************/
 
-        // ------------------------------------ INITIALIZE HOTRIOT ------------------------------------
-        public static HotRiot init(string appName)
-        {
-            HotRiot hotriot = HotRiot.getHotRiotInstance;
-
-            hotriot.fullyQualifiedHRDAURL = defines.PROTOCOL + appName + ".k222.info/da";
-            hotriot.fullyQualifiedHRURL = defines.PROTOCOL + appName + ".k222.info/process";
-
-            return hotriot;
-        }
-
         // ------------------------------------- CHECKING RESULTS -------------------------------------
-        public int getResultCode(HotRiotJSON jsonResponse)
+        public int getResultCode()
         {
-            return getGeneralInfoInteger(jsonResponse, "processingResultCode");
+            return getGeneralInfoInteger("processingResultCode");
         }
 
-        public ResultDetails getResultDetails(HotRiotJSON jsonResponse)
+        public string getResultText()
+        {
+            return getGeneralInfoString("processingResult");
+        }
+
+        public string getResultMessage()
+        {
+            return getGeneralInfoString("processingResultMessage");
+        }
+
+        public ResultDetails getResultDetails()
         {
             ResultDetails resultDetails = new ResultDetails();
 
-            resultDetails.ResultText = getGeneralInfoString(jsonResponse, "processingResult");
-            resultDetails.ResultMessage = getGeneralInfoString(jsonResponse, "processingResultMessage");
-            resultDetails.ProcessingTimeStamp = getGeneralInfoString(jsonResponse, "timeStamp");
+            resultDetails.ResultCode = getResultCode();
+            resultDetails.ResultText = getResultText();
+            resultDetails.ResultMessage = getResultMessage();
+            resultDetails.ProcessingTimeStamp = getGeneralInfoString("timeStamp");
 
             return resultDetails;
         }
 
         // ------------------------------------- GETTING ACTION -------------------------------------
-        public string getAction(HotRiotJSON jsonResponse)
+        public string getAction()
         {
-            return getGeneralInfoString(jsonResponse, "action");
-        }
-
-        // ----------------------------------- ACTION OPERATIONS ------------------------------------
-        public HotRiotJSON submitRecord(string databaseName, NameValueCollection recordData, NameValueCollection files)
-        {
-            recordData.Add("hsp-formname", databaseName);
-            return postRequest(fullyQualifiedHRURL, recordData, files);
-        }
-
-        public HotRiotJSON submitUpdateRecord(string databaseName, string recordID, string updatePassword, NameValueCollection recordData, NameValueCollection files)
-        {
-            recordData.Add("hsp-formname", databaseName);
-            recordData.Add("hsp-json", updatePassword);
-            recordData.Add("hsp-recordID", recordID);
-            return postRequest(fullyQualifiedHRURL, recordData, files);
-        }
-
-        public HotRiotJSON submitSearch(string searchName, NameValueCollection searchCriterion)
-        {
-            searchCriterion.Add("hsp-formname", searchName);
-            return postRequest(fullyQualifiedHRURL, searchCriterion, null);
-        }
-
-        public HotRiotJSON submitLogin(string loginName, NameValueCollection loginCredentials)
-        {
-            loginCredentials.Add("hsp-formname", loginName);
-            return postRequest(fullyQualifiedHRURL, loginCredentials, null);
-        }
-
-        public HotRiotJSON submitNotification(string databaseName, NameValueCollection notificationData)
-        {
-            notificationData.Add("hsp-formname", databaseName);
-            notificationData.Add("hsp-rtninsert", "1");
-            return postRequest(fullyQualifiedHRURL, notificationData, null);
-        }
-
-        public HotRiotJSON submitLostLoginLookup(string loginName, NameValueCollection loginLookupData)
-        {
-            loginLookupData.Add("hsp-formname", loginName);
-            return postRequest(fullyQualifiedHRURL, loginLookupData, null);
-        }
-
-        public HotRiotJSON submitRecordCount(NameValueCollection recordCountObject)
-        {
-            return submitRecordCount(recordCountObject, "false");
-        }
-
-        public HotRiotJSON submitRecordCountSLL(NameValueCollection recordCountObject)
-        {
-            return submitRecordCount(recordCountObject, "true");
-        }
-
-        public HotRiotJSON logout(Dictionary<string, string> logoutOptions)
-        {
-            string callbackData = null;
-
-            if (logoutOptions != null)
-                if (logoutOptions.TryGetValue("hsp-callbackdata", out callbackData) == true)
-                    callbackData = "&hsp-callbackdata=" + callbackData;
-
-            return postLink(fullyQualifiedHRDAURL + "?hsp-logout=hsp-json" + callbackData);
+            return getGeneralInfoString("action");
         }
 
         // ------------------------------------- INSERT ACTION -------------------------------------
-        public bool isUpdate(HotRiotJSON jsonResponse)
+        public bool isUpdate()
         {
-            return getGeneralInfoBool(jsonResponse, "isUpdate");
+            return getGeneralInfoBool("isUpdate");
         }
 
-        public string getInsertDatabaseName(HotRiotJSON jsonResponse)
+        public string getInsertDatabaseName()
         {
-            return getDatabaseName(jsonResponse);
+            return getDatabaseName();
         }
 
-        public string[] getInsertFieldNames(HotRiotJSON jsonResponse)
+        public string[] getInsertFieldNames()
         {
-            return getFieldNames(jsonResponse);
+            return getFieldNames();
         }
 
-        public DatabaseRecord getInsertData(HotRiotJSON jsonResponse)
+        public DatabaseRecord getInsertData()
         {
-            return getRecord(1, jsonResponse);
+            return getRecord(1);
         }
 
-        public bool getUserInfo(HotRiotJSON jsonResponse)
+        public HRUserDataResponse getUserInfo()
         {
-            String loggedInUserInfoLink = getGeneralInfoString(jsonResponse, "loggedInUserInfoLink");
+            String loggedInUserInfoLink = getGeneralInfoString("loggedInUserInfoLink");
 
             if( loggedInUserInfoLink != null )
-            {
-                postLink(loggedInUserInfoLink);
-                return true;
-            }
+                return new HRUserDataResponse(HotRiot.getHotRiotInstance.postLink(loggedInUserInfoLink));
 
-            return false;
+            return null;
         }
 
-        public string getDatePosted(HotRiotJSON jsonResponse)
+        public string getDatePosted()
         {
-            return getGeneralInfoString(jsonResponse, "datePosted");
+            return getGeneralInfoString("datePosted");
         }
 
-        public string getCallbackData(HotRiotJSON jsonResponse)
+        public string getCallbackData()
         {
-            return getGeneralInfoString(jsonResponse, "userData");
+            return getGeneralInfoString("userData");
         }
 
         // ------------------------------------- SEARCH ACTION -------------------------------------
-        public string getSearchName(HotRiotJSON jsonResponse)
+        public string getSearchName()
         {
-            return getGeneralInfoString(jsonResponse, "searchName");
+            return getGeneralInfoString("searchName");
         }
 
-        public RecordCountDetails getRecordCountInfo(HotRiotJSON jsonResponse)
+        public RecordCountDetails getRecordCountInfo()
         {
             RecordCountDetails recordCountDetails = new RecordCountDetails();
 
-            recordCountDetails.RecordCount = getGeneralInfoInteger(jsonResponse, "recordCount");
-            recordCountDetails.PageCount = getGeneralInfoInteger(jsonResponse, "pageCount");
-            recordCountDetails.PageNumber = getGeneralInfoInteger(jsonResponse, "pageNumber");
-            recordCountDetails.TotalRecordsFound = getGeneralInfoInteger(jsonResponse, "totalRecordsFound");
+            recordCountDetails.RecordCount = getGeneralInfoInteger("recordCount");
+            recordCountDetails.PageCount = getGeneralInfoInteger("pageCount");
+            recordCountDetails.PageNumber = getGeneralInfoInteger("pageNumber");
+            recordCountDetails.TotalRecordsFound = getGeneralInfoInteger("totalRecordsFound");
 
             return recordCountDetails;
         }
 
-        public string getDatabaseName(HotRiotJSON jsonResponse)
+        public string getDatabaseName()
         {
-            return getGeneralInfoString(jsonResponse, "databaseName");
+            return getGeneralInfoString("databaseName");
         }
 
-        public string[] getJoinDatabaseNames(HotRiotJSON jsonResponse)
+        public string[] getJoinDatabaseNames()
         {
-            return getGeneralInfoArray(jsonResponse, "join");
+            return getGeneralInfoArray("join");
         }
 
-        public string[] getFieldNames(HotRiotJSON jsonResponse)
+        public string[] getFieldNames()
         {
-            return getGeneralInfoArray(jsonResponse, "databaseFieldNames");
+            return getGeneralInfoArray("databaseFieldNames");
         }
 
-        public string[] getJoinFieldNames(string joinDatabaseName, HotRiotJSON jsonResponse)
+        public string[] getJoinFieldNames(string joinDatabaseName)
         {
             string[] joinFieldNames = null;
-            string[] joinDatabaseNames = getJoinDatabaseNames(jsonResponse);
+            string[] joinDatabaseNames = getJoinDatabaseNames();
 
             if( joinDatabaseNames != null )
                 for( var i=0; i<joinDatabaseNames.Length; i++ )
                     if (joinDatabaseNames[i] == joinDatabaseName)
                     {
-                        joinFieldNames = getGeneralInfoArray(jsonResponse, "joinFieldNames", i);
+                        joinFieldNames = getGeneralInfoArray("joinFieldNames", i);
                         break;
                     }
 
             return joinFieldNames;
         }
 
-        public DatabaseRecord getRecord(int recordNumber, HotRiotJSON jsonResponse)
+        public DatabaseRecord getRecord(int recordNumber)
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber, jsonResponse) == true )
+            if( isValidRecordNumber(recordNumber) == true )
             {
-                string databaseName = getDatabaseName(jsonResponse);
-                string[] databaseFieldNames = getFieldNames(jsonResponse);
+                string databaseName = getDatabaseName();
+                string[] databaseFieldNames = getFieldNames();
 
-                if( databaseName != null )
+                if (databaseFieldNames != null && databaseName != null)
                 {
-                    databaseRecord = new DatabaseRecord( databaseFieldNames.Length );
+                    if (databaseFieldNames.Length > 0 )
+                        databaseRecord = new DatabaseRecord( databaseFieldNames.Length );
 
                     for(var i=0; i<databaseFieldNames.Length; i++)
-                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, databaseFieldNames[i], databaseName, jsonResponse) );
+                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, databaseFieldNames[i], databaseName) );
                 }
             }
 
             return databaseRecord;
         }
 
-        public DatabaseRecord getJoinRecord( int recordNumber, string joinDatabaseName, HotRiotJSON jsonResponse)
+        public DatabaseRecord getJoinRecord( int recordNumber, string joinDatabaseName)
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber, jsonResponse) == true )
+            if( isValidRecordNumber(recordNumber) == true )
             {
-                string[] joinDatabaseFieldNames = getJoinFieldNames(joinDatabaseName, jsonResponse);
+                string[] joinDatabaseFieldNames = getJoinFieldNames(joinDatabaseName);
                 if( joinDatabaseFieldNames.Length > 0 )
                 {
                     databaseRecord = new DatabaseRecord( joinDatabaseFieldNames.Length );
 
                     for (var i = 0; i < joinDatabaseFieldNames.Length; i++)
-                        databaseRecord.add(getDatabaseFieldInfo(recordNumber, joinDatabaseFieldNames[i], joinDatabaseName, jsonResponse));
+                        databaseRecord.add(getDatabaseFieldInfo(recordNumber, joinDatabaseFieldNames[i], joinDatabaseName));
                 }
             }
 
             return databaseRecord;
         }
 
-        public HotRiotJSON getRecordDetails(int recordNumber, HotRiotJSON jsonResponse)
+        public HRGetTriggerResponse getTriggerRecords(int recordNumber)
         {
-            HotRiotJSON jsonRecordDetailsResponse = null;
+            HRGetTriggerResponse jsonRecordDetailsResponse = null;
 
-            if( isValidRecordNumber(recordNumber, jsonResponse) == true )
+            if( isValidRecordNumber(recordNumber) == true )
             {
-                string recordLink = getRecordDataString(recordNumber, "recordLink", jsonResponse);
+                string recordLink = getRecordDataString(recordNumber, "recordLink");
                 if(recordLink != null)
-                    jsonRecordDetailsResponse = postLink(recordLink);
+                    jsonRecordDetailsResponse = new HRGetTriggerResponse(HotRiot.getHotRiotInstance.postLink(recordLink));
             }
 
             return jsonRecordDetailsResponse;
         }
 
-        public HotRiotJSON sortSearchResults(string fieldName, HotRiotJSON jsonResponse)
+        public HRSearchResponse sortSearchResults(string fieldName)
         {
-            return sortSearchResultsEx(null, fieldName, jsonResponse);
+            return sortSearchResultsEx(null, fieldName );
         }
 
-        public HotRiotJSON sortSearchResultsEx(string databaseName, string fieldName, HotRiotJSON jsonResponse)
+        public HRSearchResponse sortSearchResultsEx(string databaseName, string fieldName)
         {
             FieldInfo recordInfo;
 
             if( databaseName == null )
             {
-                databaseName = getDatabaseName(jsonResponse);
-                recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName, jsonResponse);
+                databaseName = getDatabaseName();
+                recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
 
-                if(recordInfo == null || recordInfo.DataCount == 0)
+                // If I could not find the fieldname in the primary database, chack to see if it exists in any joined databases.
+                if(recordInfo == null)
                 {
-                    string[] joinDatabaseNames = getJoinDatabaseNames( jsonResponse );
+                    string[] joinDatabaseNames = getJoinDatabaseNames();
                     if( joinDatabaseNames != null )
                         for(var i=0; i<joinDatabaseNames.Length; i++)
                         {
-                            recordInfo = getDatabaseFieldInfo(1, fieldName, joinDatabaseNames[i], jsonResponse);
-                            if(recordInfo != null && recordInfo.DataCount != 0)
+                            recordInfo = getDatabaseFieldInfo(1, fieldName, joinDatabaseNames[i]);
+                            if(recordInfo != null)
                                 break;
                         }
                 }
 
-                if(recordInfo == null || recordInfo.DataCount == 0)
+                // If I could not find the fieldname in the primary database or any of the joined databases, chack to see if it exists in any trigger databases.
+                if (recordInfo == null)
                 {
-                    string[] triggerDatabaseNames = getTriggerDatabaseNames( jsonResponse );
+                    string[] triggerDatabaseNames = getTriggerDatabaseNames();
                     if(triggerDatabaseNames != null)
                         for(var x=0; x<triggerDatabaseNames.Length; x++)
                         {
-                            recordInfo = getDatabaseFieldInfo(1, fieldName, triggerDatabaseNames[x], jsonResponse);
-                            if(recordInfo != null && recordInfo.DataCount != 0)
+                            recordInfo = getDatabaseFieldInfo(1, fieldName, triggerDatabaseNames[x]);
+                            if(recordInfo != null)
                                 break;
                         }
                     }
 
-                if(recordInfo != null && recordInfo.DataCount != 0)
-                    return postLink(recordInfo.SortLink);
+                // If a record was found with the fieldName, then post the sort link.
+                if(recordInfo != null)
+                    return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
             else
             {
-                recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName, jsonResponse);
-                if(recordInfo != null && recordInfo.DataCount != 0)
-                    postLink(recordInfo.SortLink);
+                recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
+                if(recordInfo != null)
+                    new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
         
             return null;
         }
 
-        public HotRiotJSON getNextPage(HotRiotJSON jsonResponse)
+        public HotRiotJSON getNextPage()
         {
-            string nextPageLink = getGeneralInfoString(jsonResponse, "nextPageLinkURL");
+            string nextPageLink = getGeneralInfoString("nextPageLinkURL");
             if (nextPageLink != null)
-                return postLink(nextPageLink);
+                return HotRiot.getHotRiotInstance.postLink(nextPageLink);
 
             return null;
         }
 
-        public HotRiotJSON getPreviousPage(HotRiotJSON jsonResponse)
+        public HotRiotJSON getPreviousPage()
         {
-            string nextPageLink = getGeneralInfoString(jsonResponse, "previousPageLinkURL");
+            string nextPageLink = getGeneralInfoString("previousPageLinkURL");
             if (nextPageLink != null)
-                return postLink(nextPageLink);
+                return HotRiot.getHotRiotInstance.postLink(nextPageLink);
 
             return null;
         }
 
-        public HotRiotJSON getFirstPage(HotRiotJSON jsonResponse)
+        public HotRiotJSON getFirstPage()
         {
-            string nextPageLink = getGeneralInfoString(jsonResponse, "firstPageLinkURL");
+            string nextPageLink = getGeneralInfoString("firstPageLinkURL");
             if (nextPageLink != null)
-                return postLink(nextPageLink);
+                return HotRiot.getHotRiotInstance.postLink(nextPageLink);
 
             return null;
         }
 
-        public bool moreRecords(HotRiotJSON jsonResponse)
+        public bool moreRecords()
         {
-            int pageCount = getGeneralInfoInteger(jsonResponse, "pageCount");
-            int pageNumber = getGeneralInfoInteger(jsonResponse, "pageNumber");
+            int pageCount = getGeneralInfoInteger("pageCount");
+            int pageNumber = getGeneralInfoInteger("pageNumber");
 
             if( pageNumber != 0 && pageCount != 0 && pageNumber < pageCount )
                 return true;
@@ -878,311 +936,316 @@ namespace HotRiot_CS
 
         // public bool getUserInfo(HotRiotJSON jsonResponse) Implementation in Insert Action
 
-        public string getDeleteRecordCommand(int recordNumber, HotRiotJSON jsonResponse)
+        public string getDeleteRecordCommand(int recordNumber)
         {
-            if (isValidRecordNumber(recordNumber, jsonResponse) == true)
-                return getRecordDataString(recordNumber, "deleteRecordLink", jsonResponse);
+            if (isValidRecordNumber(recordNumber) == true)
+                return getRecordDataString(recordNumber, "deleteRecordLink");
 
             return null;
         }
 
-        public string getJoinDeleteRecordCommand(int recordNumber, string joinDatabaseName,  HotRiotJSON jsonResponse)
+        public string getJoinDeleteRecordCommand(int recordNumber, string joinDatabaseName)
         {
-            return getJoinRecordSystemFieldData(recordNumber, "hsp-deleteRecordLink", joinDatabaseName, jsonResponse);
+            return getJoinRecordSystemFieldData(recordNumber, "hsp-deleteRecordLink", joinDatabaseName);
         }
 
-        public HotRiotJSON deleteRecord(int recordNumber, bool repost, HotRiotJSON jsonResponse)
+        public HotRiotJSON deleteRecord(int recordNumber, bool repost)
         {
-            string deleteRecordCommand = getDeleteRecordCommand(recordNumber, jsonResponse);
+            string deleteRecordCommand = getDeleteRecordCommand(recordNumber);
             if (deleteRecordCommand != null)
                 return deleteRecordDirect(deleteRecordCommand, repost);
 
             return null;
         }
 
-        public HotRiotJSON deleteJoinRecord(int recordNumber, string joinDatabaseName, bool repostSearch, HotRiotJSON jsonResponse)
+        public HotRiotJSON deleteJoinRecord(int recordNumber, string joinDatabaseName, bool repost)
         {
-            string deleteRecordCommand = getJoinDeleteRecordCommand(recordNumber, joinDatabaseName, jsonResponse);
+            string deleteRecordCommand = getJoinDeleteRecordCommand(recordNumber, joinDatabaseName);
             if (deleteRecordCommand != null)
-                return deleteRecordDirect(deleteRecordCommand, repostSearch);
+                return deleteRecordDirect(deleteRecordCommand, repost);
 
             return null;
         }
 
-        public HotRiotJSON deleteRecordDirect(string deleteRecordCommand, bool repostSearch)
+        public HotRiotJSON deleteRecordDirect(string deleteRecordCommand, bool repost)
         {
-            if (repostSearch == false)
+            if (repost == false)
                 deleteRecordCommand = deleteRecordCommand + "&norepost=true";
 
-            return postLink(deleteRecordCommand);
+            if( repost == true )
+                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
+            else
+                return new HRDeleteResponse(HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
         }
 
-        public string getEditRecordPassword(int recordNumber, HotRiotJSON jsonResponse)
+        public string getEditRecordPassword(int recordNumber)
         {
-            if (isValidRecordNumber(recordNumber, jsonResponse) == true)
-                return getRecordDataString(recordNumber, "editRecordPswd", jsonResponse);
+            if (isValidRecordNumber(recordNumber) == true)
+                return getRecordDataString(recordNumber, "editRecordPswd");
 
             return null;
         }
 
-        public string getJoinEditRecordPassword(int recordNumber, string joinDatabaseName, HotRiotJSON jsonResponse)
+        public string getJoinEditRecordPassword(int recordNumber, string joinDatabaseName)
         {
-            return getJoinRecordSystemFieldData(recordNumber, "hsp-editRecordPswd", joinDatabaseName, jsonResponse);
+            return getJoinRecordSystemFieldData(recordNumber, "hsp-editRecordPswd", joinDatabaseName);
         }
 
-        public string getRecordID(int recordNumber, HotRiotJSON jsonResponse)
+        public string getRecordID(int recordNumber)
         {
-            if (isValidRecordNumber(recordNumber, jsonResponse) == true)
-                return getRecordDataString(recordNumber, "recordID", jsonResponse);
+            if (isValidRecordNumber(recordNumber) == true)
+                return getRecordDataString(recordNumber, "recordID");
 
             return null;
         }
 
-        public string getJoinRecordID(int recordNumber, string joinDatabaseName, HotRiotJSON jsonResponse)
+        public string getJoinRecordID(int recordNumber, string joinDatabaseName)
         {
-            return getJoinRecordSystemFieldData(recordNumber, "hsp-recordID", joinDatabaseName, jsonResponse);
+            return getJoinRecordSystemFieldData(recordNumber, "hsp-recordID", joinDatabaseName);
         }
 
-        public HotRiotJSON getJsonResponseFromRSL(string fieldName, HotRiotJSON jsonResponse)
+        public HotRiotJSON getJsonResponseFromRSL(string fieldName)
         {
             return null;
         }
 
-        public string getExcelDownloadLink(HotRiotJSON jsonResponse)
+        public string getExcelDownloadLink()
         {
-            return getGeneralInfoString(jsonResponse, "excelDownloadLink");
+            return getGeneralInfoString("excelDownloadLink");
         }
 
-        // public string getCallbackData(HotRiotJSON jsonResponse) Implementation in Insert Action
+        // public string getCallbackData() Implementation in Insert Action
 
         // ------------------------------------- USER DATA ACTION -------------------------------------
-        public string getRegDatabaseName(HotRiotJSON jsonResponse)
+        public string getRegDatabaseName()
         {
-            return getDatabaseName(jsonResponse);
+            return getDatabaseName();
         }
 
-        public string[] getRegFieldNames(HotRiotJSON jsonResponse)
+        public string[] getRegFieldNames()
         {
-            return getFieldNames(jsonResponse);
+            return getFieldNames();
         }
 
-        public DatabaseRecord getRegRecord(HotRiotJSON jsonResponse)
+        public DatabaseRecord getRegRecord()
         {
-            return getRecord(1, jsonResponse);
+            return getRecord(1);
         }
 
-        public string getLastLogin(HotRiotJSON jsonResponse)
+        public string getLastLogin()
         {
-            return getGeneralInfoString(jsonResponse, "lastLogin");
+            return getGeneralInfoString("lastLogin");
         }
 
-        public SubscriptionInfo getSubscriptionInfo(HotRiotJSON jsonResponse)
+        public SubscriptionInfo getSubscriptionInfo()
         {
             SubscriptionInfo subscriptionInfo = new SubscriptionInfo();
-            subscriptionInfo.LoggedInStatus = getGeneralInfoString(jsonResponse, "loggedInStatus");
-            subscriptionInfo.SubscriptionStatus = getGeneralInfoString(jsonResponse, "subscriptionStatus");
+
+            subscriptionInfo.LoggedInStatus = getGeneralInfoString("loggedInStatus");
+            subscriptionInfo.SubscriptionStatus = getGeneralInfoString("subscriptionStatus");
 
             return subscriptionInfo;
         }
 
-        public SubscriptionDetails getSubscriptionDetails(HotRiotJSON jsonResponse)
+        public SubscriptionDetails getSubscriptionDetails()
         {
-            if( isActionValid( jsonResponse, "userData" ) == false )
+            if( isActionValid("userData" ) == false )
                 return null;
 
             SubscriptionDetails subscriptionDetails = new SubscriptionDetails();
 
-            subscriptionDetails.ServicePlan = getSubscriptionInfoString(jsonResponse, "servicePlan");
-            subscriptionDetails.AccountStatus = getSubscriptionInfoString(jsonResponse, "accountStatus");
+            subscriptionDetails.ServicePlan = getSubscriptionInfoString("servicePlan");
+            subscriptionDetails.AccountStatus = getSubscriptionInfoString("accountStatus");
 
             if( subscriptionDetails.AccountStatus.Equals("Inactive") == false && subscriptionDetails.AccountStatus.Equals("Always Active") == false )
             {
                 if( subscriptionDetails.AccountStatus.Equals("Active for a number of days") == true )
-                    subscriptionDetails.RemainingDaysActive = getSubscriptionInfoInteger(jsonResponse, "remainingdaysActive");
+                    subscriptionDetails.RemainingDaysActive = getSubscriptionInfoInteger("remainingdaysActive");
 
                 if( subscriptionDetails.AccountStatus.Equals("Active while account balance is positive") == true )
                 {
-                    subscriptionDetails.CurrentAccountBalance = getSubscriptionInfoString(jsonResponse, "currentAccountBalance");
-                    subscriptionDetails.DailyRate = getSubscriptionInfoString(jsonResponse, "dailyRate");
+                    subscriptionDetails.CurrentAccountBalance = getSubscriptionInfoString("currentAccountBalance");
+                    subscriptionDetails.DailyRate = getSubscriptionInfoString("dailyRate");
                 }
             }
 
             if( subscriptionDetails.AccountStatus.Equals("Inactive") == false )
             {
-                subscriptionDetails.UsageRestrictions = getSubscriptionInfoString(jsonResponse, "usageRestrictions");
+                subscriptionDetails.UsageRestrictions = getSubscriptionInfoString("usageRestrictions");
                 if( subscriptionDetails.UsageRestrictions.Equals("By number of records") == true )
-                    subscriptionDetails.RecordStorageRestriction = getSubscriptionInfoString(jsonResponse, "recordStorageRestriction");
+                    subscriptionDetails.RecordStorageRestriction = getSubscriptionInfoString("recordStorageRestriction");
             }
 
             return subscriptionDetails;
         }
 
-        public int getPaymentCount(HotRiotJSON jsonResponse)
+        public int getPaymentCount()
         {
-            return getSubscriptionPaymentInfoInteger(jsonResponse, "paymentCount");
+            return getSubscriptionPaymentInfoInteger("paymentCount");
         }
 
-        public int getTotalPaid(HotRiotJSON jsonResponse)
+        public int getTotalPaid()
         {
-            return getSubscriptionPaymentInfoInteger(jsonResponse, "totalPaid");
+            return getSubscriptionPaymentInfoInteger("totalPaid");
         }
 
-        public SubscriptionPaymentInfo getPaymentInfo(int paymentNumber, HotRiotJSON jsonResponse)
+        public SubscriptionPaymentInfo getPaymentInfo(int paymentNumber)
         {
             SubscriptionPaymentInfo subscriptionPaymentInfo = new SubscriptionPaymentInfo();
 
-            subscriptionPaymentInfo.PaymentAmount = getSubscriptionPaymentInfoString(paymentNumber, "paymentAmount", jsonResponse);
-            subscriptionPaymentInfo.ServicePlan = getSubscriptionPaymentInfoString(paymentNumber, "servicePlan", jsonResponse);
-            subscriptionPaymentInfo.PaymentProcessor = getSubscriptionPaymentInfoString(paymentNumber, "paymentProcessor", jsonResponse);
-            subscriptionPaymentInfo.TransactionID = getSubscriptionPaymentInfoString(paymentNumber, "transactionID", jsonResponse);
-            subscriptionPaymentInfo.TransactionDate = getSubscriptionPaymentInfoString(paymentNumber, "transactionDate", jsonResponse);
-            subscriptionPaymentInfo.Currency = getSubscriptionPaymentInfoString(paymentNumber, "currency", jsonResponse);
+            int paymentCount = getPaymentCount();
+            if(paymentCount > 0 && paymentCount >= paymentNumber && paymentNumber >= 1)
+            {
+                subscriptionPaymentInfo.PaymentAmount = getSubscriptionPaymentInfoString(paymentNumber, "paymentAmount");
+                subscriptionPaymentInfo.ServicePlan = getSubscriptionPaymentInfoString(paymentNumber, "servicePlan");
+                subscriptionPaymentInfo.PaymentProcessor = getSubscriptionPaymentInfoString(paymentNumber, "paymentProcessor");
+                subscriptionPaymentInfo.TransactionID = getSubscriptionPaymentInfoString(paymentNumber, "transactionID");
+                subscriptionPaymentInfo.TransactionDate = getSubscriptionPaymentInfoString(paymentNumber, "transactionDate");
+                subscriptionPaymentInfo.Currency = getSubscriptionPaymentInfoString(paymentNumber, "currency");
+            }
 
             return subscriptionPaymentInfo;
         }
 
-        public string getEditRecordPassword(HotRiotJSON jsonResponse)
+        public string getEditRecordPassword()
         {
-            return getEditRecordPassword(1, jsonResponse);
+            return getEditRecordPassword(1);
         }
 
-        public string getRecordID(HotRiotJSON jsonResponse)
+        public string getRecordID()
         {
-            return getRecordID(1, jsonResponse);
+            return getRecordID(1);
         }
 
         // ------------------------------------- RECORD DETAILS ACTION -------------------------------------
-        // public string getDatabaseName(HotRiotJSON jsonResponse) Implementation in search action.
+        // public string getDatabaseName() Implementation in search action.
 
-        // public string[] getFieldNames(HotRiotJSON jsonResponse) Implementation in search action.
+        // public string[] getFieldNames() Implementation in search action.
 
-        // public DatabaseRecord getRecord(int recordNumber, HotRiotJSON jsonResponse)  Implementation in search action.
+        // public DatabaseRecord getRecord(int recordNumber)  Implementation in search action.
 
-        public string[] getTriggerDatabaseNames(HotRiotJSON jsonResponse)
+        public string[] getTriggerDatabaseNames()
         {
-            return getGeneralInfoArray(jsonResponse, "trigger");
+            return getGeneralInfoArray("trigger");
         }
 
-        public string[] getTriggerFieldNames(string triggerDatabaseName, HotRiotJSON jsonResponse)
+        public string[] getTriggerFieldNames(string triggerDatabaseName)
         {
             string[] triggerFieldNames = null;
-            string[] triggerDatabaseNames = getTriggerDatabaseNames(jsonResponse);
+            string[] triggerDatabaseNames = getTriggerDatabaseNames();
 
             if(triggerDatabaseNames != null)
                 for(var i=0; i<triggerDatabaseNames.Length; i++)
                     if(triggerDatabaseNames[i] == triggerDatabaseName)
                     {
-                        triggerFieldNames = getGeneralInfoArray(jsonResponse, "triggerFieldNames", i);
+                        triggerFieldNames = getGeneralInfoArray("triggerFieldNames", i);
                         break;
                     }
 
             return triggerFieldNames;
         }
 
-        public DatabaseRecord getTriggerRecord(string triggerDatabaseName, HotRiotJSON jsonResponse)
+        public DatabaseRecord getTriggerRecord(string triggerDatabaseName)
         {
-            return getTriggerRecordInfo(1, triggerDatabaseName, jsonResponse);
+            return getTriggerRecordInfo(1, triggerDatabaseName);
         }
 
         // ------------------------------------- LOGIN ACTION -------------------------------------
-        public string getLoginName(HotRiotJSON jsonResponse)
+        public string getLoginName()
         {
-            return getGeneralInfoString(jsonResponse, "searchName");
+            return getGeneralInfoString("searchName");
         }
 
-        public string getRegDatabaseName(HotRiotJSON jsonResponse)
-        {
-            return getDatabaseName(jsonResponse);
-        }
+        // public string getRegDatabaseName() Implementation in user data action.
 
-        // public string[] getRegFieldNames(HotRiotJSON jsonResponse)  Implementation in user data action.
+        // public string[] getRegFieldNames()  Implementation in user data action.
 
-        // public string[] getRegRecords(HotRiotJSON jsonResponse)  Implementation in user data action.
+        // public string[] getRegRecords()  Implementation in user data action.
 
-        // public string[] getLastLogin(HotRiotJSON jsonResponse)  Implementation in user data action.
+        // public string[] getLastLogin()  Implementation in user data action.
 
-        // public bool getUserInfo(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public bool getUserInfo()  Implementation in insert action.
 
-        // public string getEditRecordPassword(HotRiotJSON jsonResponse)  Implementation in user data action.
+        // public string getEditRecordPassword()  Implementation in user data action.
 
-        // public string getRecordID(int recordNumber, HotRiotJSON jsonResponse) Implementation in search action.
+        // public string getRecordID(int recordNumber) Implementation in user data action.
 
-        // public string[] getTriggerDatabaseNames(HotRiotJSON jsonResponse)  Implementation in record details action.
+        // public string[] getTriggerDatabaseNames()  Implementation in record details action.
 
-        // public string[] getTriggerFieldNames(string triggerDatabaseName, HotRiotJSON jsonResponse)  Implementation in record details action.
+        // public string[] getTriggerFieldNames(string triggerDatabaseName)  Implementation in record details action.
 
-        // public DatabaseRecord getTriggerRecord(string triggerDatabaseName, HotRiotJSON jsonResponse)  Implementation in record details action.
+        // public DatabaseRecord getTriggerRecord(string triggerDatabaseName)  Implementation in record details action.
 
-        // public string getCallbackData(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public string getCallbackData()  Implementation in insert action.
 
         // ------------------------------------- LOGOUT ACTION -------------------------------------
-        // public string getCallbackData(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public string getCallbackData()  Implementation in insert action.
 
         // ------------------------------------- GET LOGIN CREDENTIALS ACTION -------------------------------------
-        // public string getLoginName(HotRiotJSON jsonResponse)  Implementation in login action.
+        // public string getLoginName()  Implementation in login action.
 
-        // public string getCallbackData(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public string getCallbackData()  Implementation in insert action.
 
         // ------------------------------------- NOTIFICATION REGISTRATION ACTION -------------------------------------
-        public string getNotificationDatabaseName(HotRiotJSON jsonResponse)
+        public string getNotificationDatabaseName()
         {
-            return getDatabaseName(jsonResponse);
+            return getDatabaseName();
         }
 
-        public string[] getNotificationFieldNames(HotRiotJSON jsonResponse)
+        public string[] getNotificationFieldNames()
         {
-            return getFieldNames(jsonResponse);
+            return getFieldNames();
         }
 
-        public DatabaseRecord getNotificationData(HotRiotJSON jsonResponse)
+        public DatabaseRecord getNotificationData()
         {
-            return getRecord(1, jsonResponse);
+            return getRecord(1);
         }
 
-        // public bool getUserInfo(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public bool getUserInfo()  Implementation in insert action.
 
-        // public string getDatePosted(HotRiotJSON jsonResponse)   Implementation in insert action.
+        // public string getDatePosted()   Implementation in insert action.
 
-        // public string getCallbackData(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public string getCallbackData()  Implementation in insert action.
 
 
         // ------------------------------------- RECORD COUNT ACTION -------------------------------------
-        public string getRecordCountDatabaseName(HotRiotJSON jsonResponse)
+        public string getRecordCountDatabaseName()
         {
-            return getDatabaseName(jsonResponse);
+            return getDatabaseName();
         }
 
-        // public bool getUserInfo(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public bool getUserInfo()  Implementation in insert action.
 
-        public int getRecordCount(HotRiotJSON jsonResponse)
+        public int getRecordCount()
         {
-            return getGeneralInfoInteger(jsonResponse, "recordCount");
+            return getGeneralInfoInteger("recordCount");
         }
 
-        public RecordCountParameters getOptionalRecordCountParameters(HotRiotJSON jsonResponse)
+        public RecordCountParameters getOptionalRecordCountParameters()
         {
             RecordCountParameters recordCountParameters = new RecordCountParameters();
 
-            recordCountParameters.FieldName = getGeneralInfoString(jsonResponse, "fieldName");
-            recordCountParameters.CountOperator = getGeneralInfoString(jsonResponse, "operator");
-            recordCountParameters.Comparator = getGeneralInfoString(jsonResponse, "comparator");
+            recordCountParameters.FieldName = getGeneralInfoString("fieldName");
+            recordCountParameters.CountOperator = getGeneralInfoString("operator");
+            recordCountParameters.Comparator = getGeneralInfoString("comparator");
 
             return recordCountParameters;
         }
 
-        public string getSinceLastLoginFlag(HotRiotJSON jsonResponse)
+        public bool getSinceLastLoginFlag()
         {
-            return getGeneralInfoString(jsonResponse, "sll");
+            return getGeneralInfoBool("sll");
         }
 
-        // public string getCallbackData(HotRiotJSON jsonResponse)  Implementation in insert action.
+        // public string getCallbackData()  Implementation in insert action.
 
         // ------------------------------------- DELETE RECORD ACTION -------------------------------------
-        // public string getDatabaseName(HotRiotJSON jsonResponse)  Implementation in search action.
+        // public string getDatabaseName()  Implementation in search action.
 
-        // public string getSearchName(HotRiotJSON jsonResponse)  Implementation in search action.
+        // public string getSearchName()  Implementation in search action.
 
-        // public string getRecordID(HotRiotJSON jsonResponse)  Implementation in user data action.
+        // public string getRecordID()  Implementation in user data action.
 
 
         /******************************************* END PUBLIC API *******************************************/
@@ -1208,35 +1271,38 @@ namespace HotRiot_CS
             {
                 ResultDetails resultDetails = null;
 
-                HotRiotJSON hotriotJSON = hotriot.submitRecord("clientRegistration", nvc, files);
-                if (hotriot.getResultCode(hotriotJSON) != 0)
+                HRInsertResponse hrInsertResponse = hotriot.submitRecord("clientRegistration", nvc, files);
+                if (hrInsertResponse.getResultCode() != 0)
                 {
-                    resultDetails = hotriot.getResultDetails(hotriotJSON);
+                    resultDetails = hrInsertResponse.getResultDetails();
                 }
                 else
                 {
-                    string action = hotriot.getAction(hotriotJSON);
-                    bool isUpdate = hotriot.isUpdate(hotriotJSON);
-                    string[] fieldNamesArray = hotriot.getInsertFieldNames(hotriotJSON);
-                    DatabaseRecord dr = hotriot.getInsertData(hotriotJSON);
-                    hotriot.getRecordDetails(1, hotriotJSON);  // Does not exist.
+                    HRUserDataResponse hrUserDataResponse = hrInsertResponse.getUserInfo();
+                    string action = hrInsertResponse.getAction();
+                    bool isUpdate = hrInsertResponse.isUpdate();
+                    string[] fieldNamesArray = hrInsertResponse.getInsertFieldNames();
+                    DatabaseRecord dr = hrInsertResponse.getInsertData();
+                    hrInsertResponse.getTriggerRecords(1);  // Does not exist.
+
+                    nvc.Clear();
+                    nvc.Add("formPK", "6964550949438762531");
+                    HRSearchResponse hrSearchResponse = hotriot.submitSearch("adminGetForm", nvc);
+                    string[] joinDatabaseNames = hrSearchResponse.getJoinDatabaseNames();
 
                     nvc.Clear();
                     nvc.Add("formFK", "6964550949438762531" );
-                    HotRiotJSON hotriotJSONSearchResponse = hotriot.submitSearch("adminFormHeaderSearch", nvc);
+                    hrSearchResponse = hotriot.submitSearch("adminFormHeaderSearch", nvc);
                     DatabaseRecord joinDatabaseRecord = null;
-                    if (hotriot.isValidRecordNumber(1, hotriotJSONSearchResponse) == true)
-                        joinDatabaseRecord = hotriot.getJoinRecord(1, "formQuestion", hotriotJSONSearchResponse);
-                    hotriot.sortSearchResults("formFK", hotriotJSONSearchResponse);  
+                    if (hrSearchResponse.isValidRecordNumber(1) == true)
+                        joinDatabaseRecord = hrSearchResponse.getJoinRecord(1, "formQuestion");
+                    hrSearchResponse.sortSearchResults("formFK");
 
-                    action = hotriot.getAction(hotriotJSONSearchResponse);
-                    isUpdate = hotriot.isUpdate(hotriotJSONSearchResponse);
-                    string deleteRecordCommand = hotriot.getDeleteRecordCommand(1, hotriotJSONSearchResponse);
-                    HotRiotJSON hotriotJSONRecordDetails = hotriot.getRecordDetails(1, hotriotJSONSearchResponse);
+                    action = hrSearchResponse.getAction();
+                    isUpdate = hrSearchResponse.isUpdate();
+                    string deleteRecordCommand = hrSearchResponse.getDeleteRecordCommand(1);
+                    HotRiotJSON hotriotJSONRecordDetails = hrSearchResponse.getTriggerRecords(1);
                 }
-
-                String userInfoLink = (String)((HotRiotJSON)hotriotJSON)["generalInformation"]["loggedInUserInfoLink"];
-                hotriotJSON = hotriot.postLink(userInfoLink);
             }
             catch( HotRiotException hex )
             {
@@ -1246,32 +1312,30 @@ namespace HotRiot_CS
         }
     }
 
-    interface defines
+    public class defines
     {
-        private static const string PROTOCOL = "https://";
-
-        public static const int SUCCESS = 0;
-        public static const int GENERAL_ERROR = -1;
-        public static const int SUBSCRIPTION_RECORD_LIMIT_EXCEPTION = 1;
-        public static const int INVALID_CAPTCHA_EXCEPTION = 2;
-        public static const int INVALID_DATA_EXCEPTION = 3;
-        public static const int NOT_UNIQUE_DATA_EXCEPTION = 4;
-        public static const int ACCESS_DENIED_EXCEPTION = 5;
-        public static const int FILE_SIZE_LIMIT_EXCEPTION = 6;
-        public static const int DB_FULL_EXCEPTION = 7;
-        public static const int BAD_OR_MISSING_ID_EXCEPTION = 8;
-        public static const int NO_RECORDS_FOUND_EXCEPTION = 9;
-        public static const int RECORD_NOT_FOUND_EXCEPTION = 10;
-        public static const int SESSION_TIMEOUT_EXCEPTION = 11;
-        public static const int UNAUTHORIZED_ACCESS_EXCEPTION = 12;
-        public static const int LOGIN_CREDENTIALS_NOT_FOUND = 13;
-        public static const int LOGIN_NOT_FOUND_EXCEPTION = 14;
-        public static const int INVALID_EMAIL_ADDRESS_EXCEPTION = 15;
-        public static const int MULTIPART_LIMIT_EXCEPTION = 16;
-        public static const int IP_ADDRESS_INSERT_RESTRICTION = 17;
-        public static const int INVALID_REQUEST = 18;
-        public static const int ANONYMOUS_USER_EXCEPTION = 19;
-        public static const int INVALID_UPDATE_CREDENTIALS = 20;
+        public const int SUCCESS = 0;
+        public const int GENERAL_ERROR = -1;
+        public const int SUBSCRIPTION_RECORD_LIMIT_EXCEPTION = 1;
+        public const int INVALID_CAPTCHA_EXCEPTION = 2;
+        public const int INVALID_DATA_EXCEPTION = 3;
+        public const int NOT_UNIQUE_DATA_EXCEPTION = 4;
+        public const int ACCESS_DENIED_EXCEPTION = 5;
+        public const int FILE_SIZE_LIMIT_EXCEPTION = 6;
+        public const int DB_FULL_EXCEPTION = 7;
+        public const int BAD_OR_MISSING_ID_EXCEPTION = 8;
+        public const int NO_RECORDS_FOUND_EXCEPTION = 9;
+        public const int RECORD_NOT_FOUND_EXCEPTION = 10;
+        public const int SESSION_TIMEOUT_EXCEPTION = 11;
+        public const int UNAUTHORIZED_ACCESS_EXCEPTION = 12;
+        public const int LOGIN_CREDENTIALS_NOT_FOUND = 13;
+        public const int LOGIN_NOT_FOUND_EXCEPTION = 14;
+        public const int INVALID_EMAIL_ADDRESS_EXCEPTION = 15;
+        public const int MULTIPART_LIMIT_EXCEPTION = 16;
+        public const int IP_ADDRESS_INSERT_RESTRICTION = 17;
+        public const int INVALID_REQUEST = 18;
+        public const int ANONYMOUS_USER_EXCEPTION = 19;
+        public const int INVALID_UPDATE_CREDENTIALS = 20;
     }
 
     public class RecordCountParameters
@@ -1416,6 +1480,18 @@ namespace HotRiot_CS
                     break;
                 }
         }
+
+        public FieldInfo getFieldInfo( string fieldName )
+        {
+            for (int i = 0; i < this.fieldInfo.Length; i++)
+                if (this.fieldInfo[i] != null)
+                {
+                    if( this.fieldInfo[i].FieldName.Equals( fieldName ) == true )
+                        return this.fieldInfo[i];
+                }
+
+            return null;
+        }
     }
 
     public class FieldInfo 
@@ -1517,6 +1593,12 @@ namespace HotRiot_CS
 
     public class ResultDetails
     {
+        private int resultCode;
+        public int ResultCode
+        {
+            get { return resultCode; }
+            set { resultCode = value; }
+        }
         private string resultText;
         public string ResultText
         {
@@ -1541,6 +1623,76 @@ namespace HotRiot_CS
     {
         public HotRiotJSON(JObject jObject)
             : base(jObject)
+        {
+        }
+    }
+    public class HRInsertResponse : HRResponse
+    {
+        public HRInsertResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRSearchResponse : HRResponse
+    {
+        public HRSearchResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRLoginResponse : HRResponse
+    {
+        public HRLoginResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRLoginLookupResponse : HRResponse
+    {
+        public HRLoginLookupResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRNotificationResponse : HRResponse
+    {
+        public HRNotificationResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRLogoutResponse : HRResponse
+    {
+        public HRLogoutResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRRecordCountResponse : HRResponse
+    {
+        public HRRecordCountResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRUserDataResponse : HRResponse
+    {
+        public HRUserDataResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRGetTriggerResponse : HRResponse
+    {
+        public HRGetTriggerResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRDeleteResponse : HRResponse
+    {
+        public HRDeleteResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
         {
         }
     }

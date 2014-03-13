@@ -307,40 +307,40 @@ namespace HotRiot_CS
         // ----------------------------------- ACTION OPERATIONS ------------------------------------
         public HRInsertResponse submitRecord(string databaseName, NameValueCollection recordData, NameValueCollection files)
         {
-            recordData.Add("hsp-formname", databaseName);
+            recordData.Set("hsp-formname", databaseName);
             return new HRInsertResponse(postRequest(fullyQualifiedHRURL, recordData, files));
         }
 
         public HRInsertResponse submitUpdateRecord(string databaseName, string recordID, string updatePassword, NameValueCollection recordData, NameValueCollection files)
         {
-            recordData.Add("hsp-formname", databaseName);
-            recordData.Add("hsp-json", updatePassword);
-            recordData.Add("hsp-recordID", recordID);
+            recordData.Set("hsp-formname", databaseName);
+            recordData.Set("hsp-json", updatePassword);
+            recordData.Set("hsp-recordID", recordID);
             return new HRInsertResponse(postRequest(fullyQualifiedHRURL, recordData, files));
         }
 
         public HRSearchResponse submitSearch(string searchName, NameValueCollection searchCriterion)
         {
-            searchCriterion.Add("hsp-formname", searchName);
+            searchCriterion.Set("hsp-formname", searchName);
             return new HRSearchResponse(postRequest(fullyQualifiedHRURL, searchCriterion, null));
         }
 
         public HRLoginResponse submitLogin(string loginName, NameValueCollection loginCredentials)
         {
-            loginCredentials.Add("hsp-formname", loginName);
+            loginCredentials.Set("hsp-formname", loginName);
             return new HRLoginResponse(postRequest(fullyQualifiedHRURL, loginCredentials, null));
         }
 
         public HRNotificationResponse submitNotification(string databaseName, NameValueCollection notificationData)
         {
-            notificationData.Add("hsp-formname", databaseName);
-            notificationData.Add("hsp-rtninsert", "1");
+            notificationData.Set("hsp-formname", databaseName);
+            notificationData.Set("hsp-rtninsert", "1");
             return new HRNotificationResponse(postRequest(fullyQualifiedHRURL, notificationData, null));
         }
 
         public HRLoginLookupResponse submitLostLoginLookup(string loginName, NameValueCollection loginLookupData)
         {
-            loginLookupData.Add("hsp-formname", loginName);
+            loginLookupData.Set("hsp-formname", loginName);
             return new HRLoginLookupResponse(postRequest(fullyQualifiedHRURL, loginLookupData, null));
         }
 
@@ -356,10 +356,10 @@ namespace HotRiot_CS
 
         private HotRiotJSON submitRecordCount(NameValueCollection recordCountObject, string sll)
         {
-            recordCountObject.Add("hsp-initializepage", "hsp-json");
-            recordCountObject.Add("hsp-action", "recordcount");
-            recordCountObject.Add("hsp-sll", sll);
-            recordCountObject.Add("sinceLastLogin", "false");
+            recordCountObject.Set("hsp-initializepage", "hsp-json");
+            recordCountObject.Set("hsp-action", "recordcount");
+            recordCountObject.Set("hsp-sll", sll);
+            recordCountObject.Set("sinceLastLogin", "false");
             return postRequest(fullyQualifiedHRURL, recordCountObject, null);
         }
 
@@ -896,29 +896,29 @@ namespace HotRiot_CS
             return null;
         }
 
-        public HotRiotJSON getNextPage()
+        public HRSearchResponse getNextPage()
         {
             string nextPageLink = getGeneralInfoString("nextPageLinkURL");
             if (nextPageLink != null)
-                return HotRiot.getHotRiotInstance.postLink(nextPageLink);
+                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(nextPageLink));
 
             return null;
         }
 
-        public HotRiotJSON getPreviousPage()
+        public HRSearchResponse getPreviousPage()
         {
             string nextPageLink = getGeneralInfoString("previousPageLinkURL");
             if (nextPageLink != null)
-                return HotRiot.getHotRiotInstance.postLink(nextPageLink);
+                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(nextPageLink));
 
             return null;
         }
 
-        public HotRiotJSON getFirstPage()
+        public HRSearchResponse getFirstPage()
         {
             string nextPageLink = getGeneralInfoString("firstPageLinkURL");
             if (nextPageLink != null)
-                return HotRiot.getHotRiotInstance.postLink(nextPageLink);
+                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(nextPageLink));
 
             return null;
         }
@@ -1252,63 +1252,6 @@ namespace HotRiot_CS
 
         static void Main(string[] args)
         {
-            HotRiot hotriot = HotRiot.init( "acuclient" );
-
-            NameValueCollection nvc = new NameValueCollection();
-            nvc.Add("fname", "Tom");
-            nvc.Add("lname", "Smith"); 
-            nvc.Add("address", "123 Center Street");
-            nvc.Add("city", "Sempter");
-            nvc.Add("state", "Fl.");
-            nvc.Add("zipCode", "33324");
-            nvc.Add("email", "ajserpicojunk@gmail.com");
-            nvc.Add("phone", "800.818.1879");
-            nvc.Add("password", "11111");
-
-            NameValueCollection files = new NameValueCollection();
-            files.Add("photo", "C:\\Users\\Anthony\\Pictures\\photo.JPG");
-            try
-            {
-                ResultDetails resultDetails = null;
-
-                HRInsertResponse hrInsertResponse = hotriot.submitRecord("clientRegistration", nvc, files);
-                if (hrInsertResponse.getResultCode() != 0)
-                {
-                    resultDetails = hrInsertResponse.getResultDetails();
-                }
-                else
-                {
-                    HRUserDataResponse hrUserDataResponse = hrInsertResponse.getUserInfo();
-                    string action = hrInsertResponse.getAction();
-                    bool isUpdate = hrInsertResponse.isUpdate();
-                    string[] fieldNamesArray = hrInsertResponse.getInsertFieldNames();
-                    DatabaseRecord dr = hrInsertResponse.getInsertData();
-                    hrInsertResponse.getTriggerRecords(1);  // Does not exist.
-
-                    nvc.Clear();
-                    nvc.Add("formPK", "6964550949438762531");
-                    HRSearchResponse hrSearchResponse = hotriot.submitSearch("adminGetForm", nvc);
-                    string[] joinDatabaseNames = hrSearchResponse.getJoinDatabaseNames();
-
-                    nvc.Clear();
-                    nvc.Add("formFK", "6964550949438762531" );
-                    hrSearchResponse = hotriot.submitSearch("adminFormHeaderSearch", nvc);
-                    DatabaseRecord joinDatabaseRecord = null;
-                    if (hrSearchResponse.isValidRecordNumber(1) == true)
-                        joinDatabaseRecord = hrSearchResponse.getJoinRecord(1, "formQuestion");
-                    hrSearchResponse.sortSearchResults("formFK");
-
-                    action = hrSearchResponse.getAction();
-                    isUpdate = hrSearchResponse.isUpdate();
-                    string deleteRecordCommand = hrSearchResponse.getDeleteRecordCommand(1);
-                    HotRiotJSON hotriotJSONRecordDetails = hrSearchResponse.getTriggerRecords(1);
-                }
-            }
-            catch( HotRiotException hex )
-            {
-                Exception ie = hex.InnerException;
-                ie = hex.InnerException;
-            }
         }
     }
 

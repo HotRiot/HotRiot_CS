@@ -3,6 +3,7 @@ using System;
 using System.Collections.Specialized;
 using System.IO;
 using System.Net;
+using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using System.Security.Cryptography;
  
@@ -28,7 +29,7 @@ namespace HotRiot_CS
             }
         }
 
-        internal HotRiotJSON postLink(string link)
+        internal async Task<HotRiotJSON> postLink(string link)
         {
             WebResponse webResponse = null;
             Stream requestStream = null;
@@ -47,13 +48,13 @@ namespace HotRiot_CS
                 byte[] bytes = System.Text.Encoding.UTF8.GetBytes(postData);
                 request.ContentLength = bytes.Length;
 
-                requestStream = request.GetRequestStream();
+                requestStream = await request.GetRequestStreamAsync();
                 requestStream.Write(bytes, 0, bytes.Length);
                 requestStream.Dispose();
                 requestStream.Close();
                 requestStream = null;
 
-                webResponse = request.GetResponse();
+                webResponse = await request.GetResponseAsync();
                 stream = webResponse.GetResponseStream();
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
@@ -110,7 +111,7 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
-        internal HotRiotJSON postRequest(string url, NameValueCollection nvc, NameValueCollection files)
+        internal async Task<HotRiotJSON> postRequest(string url, NameValueCollection nvc, NameValueCollection files)
         {
             WebResponse webResponse = null;
             FileStream fileStream = null;
@@ -130,11 +131,11 @@ namespace HotRiot_CS
                 httpWebRequest.Credentials =
                 System.Net.CredentialCache.DefaultCredentials;
 
-                requestStream = httpWebRequest.GetRequestStream();
                 byte[] boundarybytes = System.Text.Encoding.UTF8.GetBytes("\r\n--" + boundary + "\r\n");
                 string formdataTemplate = "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
 
-                foreach(string key in nvc.Keys)
+                requestStream = await httpWebRequest.GetRequestStreamAsync();
+                foreach (string key in nvc.Keys)
                 {
                     string formitem = string.Format(formdataTemplate, key, nvc[key]);
                     byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
@@ -170,7 +171,7 @@ namespace HotRiot_CS
                 requestStream.Close();
                 requestStream = null;
 
-                webResponse = httpWebRequest.GetResponse();
+                webResponse = await httpWebRequest.GetResponseAsync();
                 stream = webResponse.GetResponseStream();
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
@@ -305,65 +306,65 @@ namespace HotRiot_CS
         }
 
         // ----------------------------------- ACTION OPERATIONS ------------------------------------
-        public HRInsertResponse submitRecord(string databaseName, NameValueCollection recordData, NameValueCollection files)
+        public async Task<HRInsertResponse> submitRecord(string databaseName, NameValueCollection recordData, NameValueCollection files)
         {
             recordData.Set("hsp-formname", databaseName);
-            return new HRInsertResponse(postRequest(fullyQualifiedHRURL, recordData, files));
+            return new HRInsertResponse(await postRequest(fullyQualifiedHRURL, recordData, files));
         }
 
-        public HRInsertResponse submitUpdateRecord(string databaseName, string recordID, string updatePassword, NameValueCollection recordData, NameValueCollection files)
+        public async Task<HRInsertResponse> submitUpdateRecord(string databaseName, string recordID, string updatePassword, NameValueCollection recordData, NameValueCollection files)
         {
             recordData.Set("hsp-formname", databaseName);
             recordData.Set("hsp-json", updatePassword);
             recordData.Set("hsp-recordID", recordID);
-            return new HRInsertResponse(postRequest(fullyQualifiedHRURL, recordData, files));
+            return new HRInsertResponse(await postRequest(fullyQualifiedHRURL, recordData, files));
         }
 
-        public HRSearchResponse submitSearch(string searchName, NameValueCollection searchCriterion)
+        public async Task<HRSearchResponse> submitSearch(string searchName, NameValueCollection searchCriterion)
         {
             searchCriterion.Set("hsp-formname", searchName);
-            return new HRSearchResponse(postRequest(fullyQualifiedHRURL, searchCriterion, null));
+            return new HRSearchResponse(await postRequest(fullyQualifiedHRURL, searchCriterion, null));
         }
 
-        public HRLoginResponse submitLogin(string loginName, NameValueCollection loginCredentials)
+        public async Task<HRLoginResponse> submitLogin(string loginName, NameValueCollection loginCredentials)
         {
             loginCredentials.Set("hsp-formname", loginName);
-            return new HRLoginResponse(postRequest(fullyQualifiedHRURL, loginCredentials, null));
+            return new HRLoginResponse(await postRequest(fullyQualifiedHRURL, loginCredentials, null));
         }
 
-        public HRNotificationResponse submitNotification(string databaseName, NameValueCollection notificationData)
+        public async Task<HRNotificationResponse> submitNotification(string databaseName, NameValueCollection notificationData)
         {
             notificationData.Set("hsp-formname", databaseName);
             notificationData.Set("hsp-rtninsert", "1");
-            return new HRNotificationResponse(postRequest(fullyQualifiedHRURL, notificationData, null));
+            return new HRNotificationResponse(await postRequest(fullyQualifiedHRURL, notificationData, null));
         }
 
-        public HRLoginLookupResponse submitLostLoginLookup(string loginName, NameValueCollection loginLookupData)
+        public async Task<HRLoginLookupResponse> submitLostLoginLookup(string loginName, NameValueCollection loginLookupData)
         {
             loginLookupData.Set("hsp-formname", loginName);
-            return new HRLoginLookupResponse(postRequest(fullyQualifiedHRURL, loginLookupData, null));
+            return new HRLoginLookupResponse(await postRequest(fullyQualifiedHRURL, loginLookupData, null));
         }
 
-        public HRRecordCountResponse submitRecordCount(NameValueCollection recordCountObject)
+        public async Task<HRRecordCountResponse> submitRecordCount(NameValueCollection recordCountObject)
         {
-            return new HRRecordCountResponse(submitRecordCount(recordCountObject, "false"));
+            return new HRRecordCountResponse(await submitRecordCount(recordCountObject, "false"));
         }
 
-        public HRRecordCountResponse submitRecordCountSLL(NameValueCollection recordCountObject)
+        public async Task<HRRecordCountResponse> submitRecordCountSLL(NameValueCollection recordCountObject)
         {
-            return new HRRecordCountResponse(submitRecordCount(recordCountObject, "true"));
+            return new HRRecordCountResponse(await submitRecordCount(recordCountObject, "true"));
         }
 
-        private HotRiotJSON submitRecordCount(NameValueCollection recordCountObject, string sll)
+        private async Task<HotRiotJSON> submitRecordCount(NameValueCollection recordCountObject, string sll)
         {
             recordCountObject.Set("hsp-initializepage", "hsp-json");
             recordCountObject.Set("hsp-action", "recordcount");
             recordCountObject.Set("hsp-sll", sll);
             recordCountObject.Set("sinceLastLogin", "false");
-            return postRequest(fullyQualifiedHRURL, recordCountObject, null);
+            return await postRequest(fullyQualifiedHRURL, recordCountObject, null);
         }
 
-        public HRLogoutResponse submitLogout(NameValueCollection logoutOptions)
+        public async Task<HRLogoutResponse> submitLogout(NameValueCollection logoutOptions)
         {
             string callbackData = null;
 
@@ -371,7 +372,7 @@ namespace HotRiot_CS
                 if (logoutOptions["hsp-callbackdata"] != null)
                     callbackData = "&hsp-callbackdata=" + logoutOptions["hsp-callbackdata"];
 
-            return new HRLogoutResponse(postLink(fullyQualifiedHRDAURL + "?hsp-logout=hsp-json" + callbackData));
+            return new HRLogoutResponse(await postLink(fullyQualifiedHRDAURL + "?hsp-logout=hsp-json" + callbackData));
 
         }
     }
@@ -718,12 +719,12 @@ namespace HotRiot_CS
             return getRecord(1);
         }
 
-        public HRUserDataResponse getUserInfo()
+        public async Task<HRUserDataResponse> getUserInfo()
         {
             String loggedInUserInfoLink = getGeneralInfoString("loggedInUserInfoLink");
 
             if( loggedInUserInfoLink != null )
-                return new HRUserDataResponse(HotRiot.getHotRiotInstance.postLink(loggedInUserInfoLink));
+                return new HRUserDataResponse(await HotRiot.getHotRiotInstance.postLink(loggedInUserInfoLink));
 
             return null;
         }
@@ -828,7 +829,7 @@ namespace HotRiot_CS
             return databaseRecord;
         }
 
-        public HRGetTriggerResponse getTriggerRecords(int recordNumber)
+        public async Task<HRGetTriggerResponse> getTriggerRecords(int recordNumber)
         {
             HRGetTriggerResponse jsonRecordDetailsResponse = null;
 
@@ -836,18 +837,18 @@ namespace HotRiot_CS
             {
                 string recordLink = getRecordDataString(recordNumber, "recordLink");
                 if(recordLink != null)
-                    jsonRecordDetailsResponse = new HRGetTriggerResponse(HotRiot.getHotRiotInstance.postLink(recordLink));
+                    jsonRecordDetailsResponse = new HRGetTriggerResponse(await HotRiot.getHotRiotInstance.postLink(recordLink));
             }
 
             return jsonRecordDetailsResponse;
         }
 
-        public HRSearchResponse sortSearchResults(string fieldName)
+        public async Task<HRSearchResponse> sortSearchResults(string fieldName)
         {
-            return sortSearchResultsEx(null, fieldName );
+            return await sortSearchResultsEx(null, fieldName );
         }
 
-        public HRSearchResponse sortSearchResultsEx(string databaseName, string fieldName)
+        public async Task<HRSearchResponse> sortSearchResultsEx(string databaseName, string fieldName)
         {
             FieldInfo recordInfo;
 
@@ -884,41 +885,41 @@ namespace HotRiot_CS
 
                 // If a record was found with the fieldName, then post the sort link.
                 if(recordInfo != null)
-                    return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
+                    return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
             else
             {
                 recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
                 if(recordInfo != null)
-                    new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
+                    new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
         
             return null;
         }
 
-        public HRSearchResponse getNextPage()
+        public async Task<HRSearchResponse> getNextPage()
         {
             string nextPageLink = getGeneralInfoString("nextPageLinkURL");
             if (nextPageLink != null)
-                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(nextPageLink));
+                return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(nextPageLink));
 
             return null;
         }
 
-        public HRSearchResponse getPreviousPage()
+        public async Task<HRSearchResponse> getPreviousPage()
         {
             string nextPageLink = getGeneralInfoString("previousPageLinkURL");
             if (nextPageLink != null)
-                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(nextPageLink));
+                return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(nextPageLink));
 
             return null;
         }
 
-        public HRSearchResponse getFirstPage()
+        public async Task<HRSearchResponse> getFirstPage()
         {
             string nextPageLink = getGeneralInfoString("firstPageLinkURL");
             if (nextPageLink != null)
-                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(nextPageLink));
+                return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(nextPageLink));
 
             return null;
         }
@@ -949,33 +950,33 @@ namespace HotRiot_CS
             return getJoinRecordSystemFieldData(recordNumber, "hsp-deleteRecordLink", joinDatabaseName);
         }
 
-        public HotRiotJSON deleteRecord(int recordNumber, bool repost)
+        public async Task<HotRiotJSON> deleteRecord(int recordNumber, bool repost)
         {
             string deleteRecordCommand = getDeleteRecordCommand(recordNumber);
             if (deleteRecordCommand != null)
-                return deleteRecordDirect(deleteRecordCommand, repost);
+                return await deleteRecordDirect(deleteRecordCommand, repost);
 
             return null;
         }
 
-        public HotRiotJSON deleteJoinRecord(int recordNumber, string joinDatabaseName, bool repost)
+        public async Task<HotRiotJSON> deleteJoinRecord(int recordNumber, string joinDatabaseName, bool repost)
         {
             string deleteRecordCommand = getJoinDeleteRecordCommand(recordNumber, joinDatabaseName);
             if (deleteRecordCommand != null)
-                return deleteRecordDirect(deleteRecordCommand, repost);
+                return await deleteRecordDirect(deleteRecordCommand, repost);
 
             return null;
         }
 
-        public HotRiotJSON deleteRecordDirect(string deleteRecordCommand, bool repost)
+        public async Task<HotRiotJSON> deleteRecordDirect(string deleteRecordCommand, bool repost)
         {
             if (repost == false)
                 deleteRecordCommand = deleteRecordCommand + "&norepost=true";
 
             if( repost == true )
-                return new HRSearchResponse(HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
+                return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
             else
-                return new HRDeleteResponse(HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
+                return new HRDeleteResponse(await HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
         }
 
         public string getEditRecordPassword(int recordNumber)
@@ -1249,10 +1250,6 @@ namespace HotRiot_CS
 
 
         /******************************************* END PUBLIC API *******************************************/
-
-        static void Main(string[] args)
-        {
-        }
     }
 
     public class defines

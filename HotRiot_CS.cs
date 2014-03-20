@@ -6,7 +6,10 @@ using System.Net;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using System.Security.Cryptography;
- 
+
+// Disable variable not used warning for exceptions.
+#pragma warning disable 0168  
+
 namespace HotRiot_CS
 {
     public sealed class HotRiot : defines
@@ -80,7 +83,11 @@ namespace HotRiot_CS
             {
                 throw new HotRiotException("ArgumentOutOfRangeException", ex);
             }
-            catch(Exception ex)
+            catch (AggregateException ex)
+            {
+                throw new HotRiotException("AggregateException", ex);
+            } 
+            catch (Exception ex)
             {
                 throw new HotRiotException("Exception", ex);
             }
@@ -204,7 +211,11 @@ namespace HotRiot_CS
             {
                 throw new HotRiotException("IOException", ex);
             }
-            catch(Exception ex)
+            catch (AggregateException ex)
+            {
+                throw new HotRiotException("AggregateException", ex);
+            }
+            catch (Exception ex)
             {
                 throw new HotRiotException("Exception", ex);
             }
@@ -477,6 +488,18 @@ namespace HotRiot_CS
             return 0;
         }
 
+        private long getGeneralInfoLong(string field)
+        {
+            try
+            {
+                return (long)this["generalInformation"][field];
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return 0;
+        }
+
         private string[] getGeneralInfoArray(string field)
         {
             string[] retArray = null;
@@ -729,9 +752,9 @@ namespace HotRiot_CS
             return null;
         }
 
-        public string getDatePosted()
+        public long getDatePosted()
         {
-            return getGeneralInfoString("datePosted");
+            return getGeneralInfoLong("datePosted");
         }
 
         public string getCallbackData()
@@ -1205,7 +1228,7 @@ namespace HotRiot_CS
 
         // public bool getUserInfo()  Implementation in insert action.
 
-        // public string getDatePosted()   Implementation in insert action.
+        // public long getDatePosted()   Implementation in insert action.
 
         // public string getCallbackData()  Implementation in insert action.
 
@@ -1250,6 +1273,7 @@ namespace HotRiot_CS
 
 
         /******************************************* END PUBLIC API *******************************************/
+
     }
 
     public class defines

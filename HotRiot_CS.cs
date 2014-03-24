@@ -386,6 +386,18 @@ namespace HotRiot_CS
             return new HRLogoutResponse(await postLink(fullyQualifiedHRDAURL + "?hsp-logout=hsp-json" + callbackData));
 
         }
+
+        // Helper Method.
+        public async Task<HotRiotJSON> deleteRecordDirect(string deleteRecordCommand, bool repost)
+        {
+            if (repost == false)
+                deleteRecordCommand = deleteRecordCommand + "&norepost=true";
+
+            if (repost == true)
+                return new HRSearchResponse(await postLink(deleteRecordCommand));
+            else
+                return new HRDeleteResponse(await postLink(deleteRecordCommand));
+        }
     }
 
     public class HRResponse : HotRiotJSON

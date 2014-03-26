@@ -12,6 +12,8 @@ using System.Security.Cryptography;
 
 namespace HotRiot_CS
 {
+    public delegate void HTTPRequestProgressDelegate(HTTPProgresss httpProgresss);
+
     public sealed class HotRiot : defines
     {
         private static HotRiot HRInstance = new HotRiot();
@@ -135,15 +137,15 @@ namespace HotRiot_CS
                 httpWebRequest.ContentType = "multipart/form-data; boundary=" + boundary;
                 httpWebRequest.Method = "POST";
                 httpWebRequest.KeepAlive = true;
-                httpWebRequest.Credentials =
-                System.Net.CredentialCache.DefaultCredentials;
+                httpWebRequest.Credentials = System.Net.CredentialCache.DefaultCredentials;
 
-                byte[] boundarybytes = System.Text.Encoding.UTF8.GetBytes("\r\n--" + boundary + "\r\n");
-                string formdataTemplate = "\r\n--" + boundary + "\r\nContent-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
+                byte[] boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "\r\n");
+                string formdataTemplate = "Content-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
 
                 requestStream = await httpWebRequest.GetRequestStreamAsync();
                 foreach (string key in nvc.Keys)
                 {
+                    requestStream.Write(boundarybytes, 0, boundarybytes.Length);
                     string formitem = string.Format(formdataTemplate, key, nvc[key]);
                     byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
                     requestStream.Write(formitembytes, 0, formitembytes.Length);
@@ -157,7 +159,7 @@ namespace HotRiot_CS
                 {
                     byte[] buffer = new byte[4096];
 
-                    foreach(string key in files.Keys)
+                    foreach (string key in files.Keys)
                     {
                         string header = string.Format(headerTemplate, key, files[key]);
                         byte[] headerbytes = System.Text.Encoding.UTF8.GetBytes(header);
@@ -167,6 +169,7 @@ namespace HotRiot_CS
                         int bytesRead = 0;
                         while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) != 0)
                             requestStream.Write(buffer, 0, bytesRead);
+                        boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
                         requestStream.Write(boundarybytes, 0, boundarybytes.Length);
 
                         fileStream.Dispose();
@@ -183,31 +186,31 @@ namespace HotRiot_CS
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
             }
-            catch(WebException ex)
+            catch (WebException ex)
             {
                 throw new HotRiotException("WebException", ex);
             }
-            catch(ArgumentNullException ex)
+            catch (ArgumentNullException ex)
             {
                 throw new HotRiotException("ArgumentNullException", ex);
             }
-            catch(OutOfMemoryException ex)
+            catch (OutOfMemoryException ex)
             {
                 throw new HotRiotException("OutOfMemoryException", ex);
             }
-            catch(ArgumentException ex)
+            catch (ArgumentException ex)
             {
                 throw new HotRiotException("ArgumentException", ex);
             }
-            catch(FileNotFoundException ex)
+            catch (FileNotFoundException ex)
             {
-                throw new HotRiotException( "FileNotFoundException", ex );
+                throw new HotRiotException("FileNotFoundException", ex);
             }
-            catch(DirectoryNotFoundException ex)
+            catch (DirectoryNotFoundException ex)
             {
                 throw new HotRiotException("DirectoryNotFoundException", ex);
             }
-            catch(IOException ex)
+            catch (IOException ex)
             {
                 throw new HotRiotException("IOException", ex);
             }
@@ -221,7 +224,7 @@ namespace HotRiot_CS
             }
             finally
             {
-                if (fileStream != null )
+                if (fileStream != null)
                 {
                     fileStream.Dispose();
                     fileStream.Close();
@@ -249,6 +252,159 @@ namespace HotRiot_CS
             }
 
             return jsonResponse;
+        }
+
+        internal async Task<byte[]> getFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
+        {
+            HTTPProgresss httpProgresss = null;
+            WebResponse webResponse = null;
+            BinaryReader reader = null;
+            Stream stream = null;
+            byte[] response = null;
+            long chunkSize = 4096;
+            int bytesRead = 0;
+            int index = 0;
+
+            try
+            {
+                if (httpRequestProgressDelegate != null)
+                {
+                    httpProgresss = new HTTPProgresss();
+                    httpProgresss.StartTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                }
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
+                request.Method = "GET";
+                webResponse = await request.GetResponseAsync();
+                if (webResponse.ContentLength < chunkSize)
+                    chunkSize = webResponse.ContentLength;
+                response = new byte[webResponse.ContentLength];
+                stream = webResponse.GetResponseStream();
+                if (httpRequestProgressDelegate != null)
+                    httpProgresss.TotalBytesToProcess = webResponse.ContentLength;
+
+                reader = new BinaryReader(stream);
+                while ((bytesRead = reader.Read(response, index, (int)chunkSize)) != 0)
+                {
+                    index += bytesRead;
+                    if (webResponse.ContentLength - index < chunkSize)
+                        chunkSize = webResponse.ContentLength - index;
+
+                    if (httpRequestProgressDelegate != null)
+                    {
+                        long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                        httpProgresss.BytesProcessed += bytesRead;
+                        httpProgresss.TotalBytesProcessed = index;
+                        if (now - httpProgresss.StartTime > httpProgresss.ElapsTimeInMillis + 1000 || httpProgresss.TotalBytesProcessed == httpProgresss.TotalBytesToProcess)
+                        {
+                            httpProgresss.ElapsTimeInMillis = now - httpProgresss.StartTime;
+                            httpRequestProgressDelegate(httpProgresss);
+                            httpProgresss.BytesProcessed = 0;
+                        }
+                    }
+                }
+            }
+
+            catch (WebException ex)
+            {
+                throw new HotRiotException("WebException", ex);
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new HotRiotException("ArgumentNullException", ex);
+            }
+            catch (OutOfMemoryException ex)
+            {
+                throw new HotRiotException("OutOfMemoryException", ex);
+            }
+            catch (IOException ex)
+            {
+                throw new HotRiotException("IOException", ex);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new HotRiotException("ArgumentOutOfRangeException", ex);
+            }
+            catch (AggregateException ex)
+            {
+                throw new HotRiotException("AggregateException", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new HotRiotException("Exception", ex);
+            }
+            finally
+            {
+                if (reader != null)
+                {
+                    reader.Dispose();
+                    reader.Close();
+                }
+                if (stream != null)
+                {
+                    stream.Dispose();
+                    stream.Close();
+                }
+                if (webResponse != null)
+                {
+                    webResponse.Dispose();
+                    webResponse.Close();
+                }
+            }
+
+            return response;
+        }
+
+        internal async Task<long> getFileLength(string fileLink)
+        {
+            WebResponse webResponse = null;
+            long length = 0;
+
+            try
+            {
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
+                request.Method = "GET";
+                webResponse = await request.GetResponseAsync();
+                length = webResponse.ContentLength;
+            }
+
+            catch (WebException ex)
+            {
+                throw new HotRiotException("WebException", ex);
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new HotRiotException("ArgumentNullException", ex);
+            }
+            catch (OutOfMemoryException ex)
+            {
+                throw new HotRiotException("OutOfMemoryException", ex);
+            }
+            catch (IOException ex)
+            {
+                throw new HotRiotException("IOException", ex);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new HotRiotException("ArgumentOutOfRangeException", ex);
+            }
+            catch (AggregateException ex)
+            {
+                throw new HotRiotException("AggregateException", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new HotRiotException("Exception", ex);
+            }
+            finally
+            {
+                if (webResponse != null)
+                {
+                    webResponse.Dispose();
+                    webResponse.Close();
+                }
+            }
+
+            return length;
         }
 
         private string HMACToken(string message)
@@ -1687,6 +1843,40 @@ namespace HotRiot_CS
         public HotRiotException(string message, Exception inner)
             : base(message, inner)
         {
+        }
+    }
+
+    public class HTTPProgresss
+    {
+        private long totalBytesProcessed;
+        public long TotalBytesProcessed
+        {
+            get { return totalBytesProcessed; }
+            set { totalBytesProcessed = value; }
+        }
+        private long totalBytesToProcess;
+        public long TotalBytesToProcess
+        {
+            get { return totalBytesToProcess; }
+            set { totalBytesToProcess = value; }
+        }
+        private long elapsTimeInMillis;
+        public long ElapsTimeInMillis
+        {
+            get { return elapsTimeInMillis; }
+            set { elapsTimeInMillis = value; }
+        }
+        private long bytesProcessed;
+        public long BytesProcessed
+        {
+            get { return bytesProcessed; }
+            set { bytesProcessed = value; }
+        }
+        private long startTime;
+        public long StartTime
+        {
+            get { return startTime; }
+            set { startTime = value; }
         }
     }
 }

@@ -254,6 +254,128 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
+        internal async Task getFile(string fileLink, string filePath, HTTPRequestProgressDelegate httpRequestProgressDelegate)
+        {
+            long chunkSize = 4096;
+
+            HTTPProgresss httpProgresss = null;
+            byte[] response = new byte[chunkSize];
+            WebResponse webResponse = null;
+            BinaryReader reader = null;
+            FileStream fStream = null;
+            Stream stream = null;
+            int bytesRead = 0;
+            int index = 0;
+
+            try
+            {
+                if (File.Exists(filePath) == true)
+                    throw new IOException("File already exists.");
+
+                if (httpRequestProgressDelegate != null)
+                {
+                    httpProgresss = new HTTPProgresss();
+                    httpProgresss.StartTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                }
+                HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
+                request.Method = "GET";
+                webResponse = await request.GetResponseAsync();
+                if (webResponse.ContentLength < chunkSize)
+                    chunkSize = webResponse.ContentLength;
+                stream = webResponse.GetResponseStream();
+                if (httpRequestProgressDelegate != null)
+                    httpProgresss.TotalBytesToProcess = webResponse.ContentLength;
+
+                fStream = File.Create(filePath);
+                reader = new BinaryReader(stream);
+                while ((bytesRead = reader.Read(response, 0, (int)chunkSize)) != 0)
+                {
+                    fStream.Write(response, 0, bytesRead);
+
+                    index += bytesRead;
+                    if (webResponse.ContentLength - index < chunkSize)
+                        chunkSize = webResponse.ContentLength - index;
+
+                    if (httpRequestProgressDelegate != null)
+                    {
+                        long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                        httpProgresss.BytesProcessed += bytesRead;
+                        httpProgresss.TotalBytesProcessed = index;
+                        if (now - httpProgresss.StartTime > httpProgresss.ElapsTimeInMillis + 1000 || httpProgresss.TotalBytesProcessed == httpProgresss.TotalBytesToProcess)
+                        {
+                            httpProgresss.ElapsTimeInMillis = now - httpProgresss.StartTime;
+                            httpRequestProgressDelegate(httpProgresss);
+                            httpProgresss.BytesProcessed = 0;
+                        }
+                    }
+                }
+            }
+
+            catch (WebException ex)
+            {
+                throw new HotRiotException("WebException", ex);
+            }
+            catch (ArgumentNullException ex)
+            {
+                throw new HotRiotException("ArgumentNullException", ex);
+            }
+            catch (OutOfMemoryException ex)
+            {
+                throw new HotRiotException("OutOfMemoryException", ex);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                throw new HotRiotException("DirectoryNotFoundException", ex);
+            }
+            catch (PathTooLongException ex)
+            {
+                throw new HotRiotException("PathTooLongException", ex);
+            }
+            catch (IOException ex)
+            {
+                throw new HotRiotException("IOException", ex);
+            }
+            catch (ArgumentOutOfRangeException ex)
+            {
+                throw new HotRiotException("ArgumentOutOfRangeException", ex);
+            }
+            catch (AggregateException ex)
+            {
+                throw new HotRiotException("AggregateException", ex);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                throw new HotRiotException("UnauthorizedAccessException", ex);
+            }
+            catch (Exception ex)
+            {
+                throw new HotRiotException("Exception", ex);
+            }
+            finally
+            {
+                if (fStream != null)
+                {
+                    fStream.Dispose();
+                    fStream.Close();
+                }
+                if (reader != null)
+                {
+                    reader.Dispose();
+                    reader.Close();
+                }
+                if (stream != null)
+                {
+                    stream.Dispose();
+                    stream.Close();
+                }
+                if (webResponse != null)
+                {
+                    webResponse.Dispose();
+                    webResponse.Close();
+                }
+            }
+        }
+
         internal async Task<byte[]> getFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
         {
             HTTPProgresss httpProgresss = null;
@@ -354,17 +476,23 @@ namespace HotRiot_CS
             return response;
         }
 
-        internal async Task<long> getFileLength(string fileLink)
+        internal async Task<FileMetadata> getFileMetadata(string fileLink)
         {
+            FileMetadata fileMetadata = new FileMetadata();
             WebResponse webResponse = null;
-            long length = 0;
 
             try
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
                 webResponse = await request.GetResponseAsync();
-                length = webResponse.ContentLength;
+                fileMetadata.ContentLength = webResponse.ContentLength;
+                fileMetadata.ContentType = webResponse.ContentType;
+                fileMetadata.IsFromCache = webResponse.IsFromCache;
+
+                WebHeaderCollection WebHeadersCollection = webResponse.Headers;
+                fileMetadata.Date = WebHeadersCollection.Get("Date");
+                fileMetadata.LastModified = WebHeadersCollection.Get("Last-Modified");
             }
 
             catch (WebException ex)
@@ -404,7 +532,7 @@ namespace HotRiot_CS
                 }
             }
 
-            return length;
+            return fileMetadata;
         }
 
         private string HMACToken(string message)
@@ -1441,7 +1569,6 @@ namespace HotRiot_CS
 
 
         /******************************************* END PUBLIC API *******************************************/
-
     }
 
     public class defines
@@ -1877,6 +2004,40 @@ namespace HotRiot_CS
         {
             get { return startTime; }
             set { startTime = value; }
+        }
+    }
+
+    class FileMetadata
+    {
+        private long contentLength;
+        public long ContentLength
+        {
+            get { return contentLength; }
+            set { contentLength = value; }
+        }
+        private string contentType;
+        public string ContentType
+        {
+            get { return contentType; }
+            set { contentType = value; }
+        }
+        private bool isFromCache;
+        public bool IsFromCache
+        {
+            get { return isFromCache; }
+            set { isFromCache = value; }
+        }
+        private string date;
+        public string Date
+        {
+            get { return date; }
+            set { date = value; }
+        }
+        private string lastModified;
+        public string LastModified
+        {
+            get { return lastModified; }
+            set { lastModified = value; }
         }
     }
 }

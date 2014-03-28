@@ -8,7 +8,7 @@ using Newtonsoft.Json.Linq;
 using System.Security.Cryptography;
 
 // Disable variable not used warning for exceptions.
-#pragma warning disable 0168  
+#pragma warning disable 0168
 
 namespace HotRiot_CS
 {
@@ -24,7 +24,7 @@ namespace HotRiot_CS
         private string jSessionID;
         private string hmKey;
 
-        private HotRiot(){}
+        private HotRiot() { }
 
         internal static HotRiot getHotRiotInstance
         {
@@ -64,31 +64,31 @@ namespace HotRiot_CS
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
             }
-               
-            catch(WebException ex )
+
+            catch (WebException ex)
             {
                 throw new HotRiotException("WebException", ex);
             }
-            catch(ArgumentNullException ex )
+            catch (ArgumentNullException ex)
             {
                 throw new HotRiotException("ArgumentNullException", ex);
             }
-            catch(OutOfMemoryException ex)
+            catch (OutOfMemoryException ex)
             {
                 throw new HotRiotException("OutOfMemoryException", ex);
             }
-            catch(IOException ex)
+            catch (IOException ex)
             {
                 throw new HotRiotException("IOException", ex);
             }
-            catch(ArgumentOutOfRangeException ex)
+            catch (ArgumentOutOfRangeException ex)
             {
                 throw new HotRiotException("ArgumentOutOfRangeException", ex);
             }
             catch (AggregateException ex)
             {
                 throw new HotRiotException("AggregateException", ex);
-            } 
+            }
             catch (Exception ex)
             {
                 throw new HotRiotException("Exception", ex);
@@ -254,7 +254,7 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
-        internal async Task getFile(string fileLink, string filePath, HTTPRequestProgressDelegate httpRequestProgressDelegate)
+        public async Task saveFile(string fileLink, string filePath, HTTPRequestProgressDelegate httpRequestProgressDelegate)
         {
             long chunkSize = 4096;
 
@@ -376,7 +376,7 @@ namespace HotRiot_CS
             }
         }
 
-        internal async Task<byte[]> getFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
+        public async Task<byte[]> readFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
         {
             HTTPProgresss httpProgresss = null;
             WebResponse webResponse = null;
@@ -476,7 +476,7 @@ namespace HotRiot_CS
             return response;
         }
 
-        internal async Task<FileMetadata> getFileMetadata(string fileLink)
+        public async Task<FileMetadata> getFileMetadata(string fileLink)
         {
             FileMetadata fileMetadata = new FileMetadata();
             WebResponse webResponse = null;
@@ -694,8 +694,8 @@ namespace HotRiot_CS
         private bool isActionValid(string validAction)
         {
             string action = getAction();
-            if(action != null && action.Equals(validAction) == true)
-                    return true;
+            if (action != null && action.Equals(validAction) == true)
+                return true;
 
             return false;
         }
@@ -779,7 +779,7 @@ namespace HotRiot_CS
                 return (int)this["generalInformation"][field];
             }
             catch (NullReferenceException doNothing) { }
-            catch (ArgumentNullException doNothing){ }
+            catch (ArgumentNullException doNothing) { }
 
             return 0;
         }
@@ -843,16 +843,16 @@ namespace HotRiot_CS
             return retArray;
         }
 
-        private bool isValidRecordNumber( int recordNumber)
+        private bool isValidRecordNumber(int recordNumber)
         {
-            if( recordNumber > 0 )
-                if (recordNumber <= getGeneralInfoInteger("recordCount") )
+            if (recordNumber > 0)
+                if (recordNumber <= getGeneralInfoInteger("recordCount"))
                     return true;
 
             return false;
         }
 
-        private string getFieldDataString( int recordNumber, string dbFieldName)
+        private string getFieldDataString(int recordNumber, string dbFieldName)
         {
             try
             {
@@ -893,7 +893,7 @@ namespace HotRiot_CS
 
         private string processDataString(string data)
         {
-            if(data != null)
+            if (data != null)
                 if (data.Length == 0)
                     data = null;
 
@@ -915,7 +915,7 @@ namespace HotRiot_CS
                 recordInfo.FieldName = fieldName;
                 recordInfo.DatabaseName = databaseName;
 
-                if(recordInfo.DataCount != 0)
+                if (recordInfo.DataCount != 0)
                 {
                     JArray valueString = (JArray)jFieldInfo["value"];
                     recordInfo.allocateFieldData(valueString.Count);
@@ -926,7 +926,7 @@ namespace HotRiot_CS
                     if (recordInfo.DataType == "File")
                     {
                         recordInfo.FileLinkURL = (string)jFieldInfo["fileLinkURL"];
-                        if((recordInfo.IsPicture = isImage(recordInfo[0])) == true)
+                        if ((recordInfo.IsPicture = isImage(recordInfo[0])) == true)
                             recordInfo.ThumbnailLinkURL = (string)jFieldInfo["thumbnailLinkURL"];
                     }
                     else
@@ -937,13 +937,13 @@ namespace HotRiot_CS
             return recordInfo;
         }
 
-        private bool isImage( string filename )
+        private bool isImage(string filename)
         {
             string[] parts = filename.Split('.');
-            if( parts.Length > 1 )
+            if (parts.Length > 1)
             {
-                string extension = parts[parts.Length-1].ToLower();
-                if( extension.Equals("jpg") == true || extension.Equals("jpeg") == true )
+                string extension = parts[parts.Length - 1].ToLower();
+                if (extension.Equals("jpg") == true || extension.Equals("jpeg") == true)
                     return true;
             }
 
@@ -956,7 +956,7 @@ namespace HotRiot_CS
 
             string dbFieldName = databaseName + "::" + systemFieldName;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
                 fieldData = getFieldDataString(recordNumber, dbFieldName);
 
             return fieldData;
@@ -966,22 +966,22 @@ namespace HotRiot_CS
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 var triggerDatabaseFieldNames = getTriggerFieldNames(triggerDatabaseName);
-                if( triggerDatabaseFieldNames != null && triggerDatabaseFieldNames.Length > 0)
+                if (triggerDatabaseFieldNames != null && triggerDatabaseFieldNames.Length > 0)
                 {
-                    databaseRecord = new DatabaseRecord( triggerDatabaseFieldNames.Length );
+                    databaseRecord = new DatabaseRecord(triggerDatabaseFieldNames.Length);
 
-                    for(int i=0; i<triggerDatabaseFieldNames.Length; i++)
-                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, triggerDatabaseFieldNames[i], triggerDatabaseName) );
+                    for (int i = 0; i < triggerDatabaseFieldNames.Length; i++)
+                        databaseRecord.add(getDatabaseFieldInfo(recordNumber, triggerDatabaseFieldNames[i], triggerDatabaseName));
                 }
             }
 
             return databaseRecord;
         }
 
-/********************************************* PUBLIC API *********************************************/
+        /********************************************* PUBLIC API *********************************************/
 
         // ------------------------------------- CHECKING RESULTS -------------------------------------
         public int getResultCode()
@@ -1042,7 +1042,7 @@ namespace HotRiot_CS
         {
             String loggedInUserInfoLink = getGeneralInfoString("loggedInUserInfoLink");
 
-            if( loggedInUserInfoLink != null )
+            if (loggedInUserInfoLink != null)
                 return new HRUserDataResponse(await HotRiot.getHotRiotInstance.postLink(loggedInUserInfoLink));
 
             return null;
@@ -1096,8 +1096,8 @@ namespace HotRiot_CS
             string[] joinFieldNames = null;
             string[] joinDatabaseNames = getJoinDatabaseNames();
 
-            if( joinDatabaseNames != null )
-                for( var i=0; i<joinDatabaseNames.Length; i++ )
+            if (joinDatabaseNames != null)
+                for (var i = 0; i < joinDatabaseNames.Length; i++)
                     if (joinDatabaseNames[i] == joinDatabaseName)
                     {
                         joinFieldNames = getGeneralInfoArray("joinFieldNames", i);
@@ -1111,34 +1111,34 @@ namespace HotRiot_CS
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 string databaseName = getDatabaseName();
                 string[] databaseFieldNames = getFieldNames();
 
                 if (databaseFieldNames != null && databaseName != null)
                 {
-                    if (databaseFieldNames.Length > 0 )
-                        databaseRecord = new DatabaseRecord( databaseFieldNames.Length );
+                    if (databaseFieldNames.Length > 0)
+                        databaseRecord = new DatabaseRecord(databaseFieldNames.Length);
 
-                    for(var i=0; i<databaseFieldNames.Length; i++)
-                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, databaseFieldNames[i], databaseName) );
+                    for (var i = 0; i < databaseFieldNames.Length; i++)
+                        databaseRecord.add(getDatabaseFieldInfo(recordNumber, databaseFieldNames[i], databaseName));
                 }
             }
 
             return databaseRecord;
         }
 
-        public DatabaseRecord getJoinRecord( int recordNumber, string joinDatabaseName)
+        public DatabaseRecord getJoinRecord(int recordNumber, string joinDatabaseName)
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 string[] joinDatabaseFieldNames = getJoinFieldNames(joinDatabaseName);
-                if( joinDatabaseFieldNames.Length > 0 )
+                if (joinDatabaseFieldNames.Length > 0)
                 {
-                    databaseRecord = new DatabaseRecord( joinDatabaseFieldNames.Length );
+                    databaseRecord = new DatabaseRecord(joinDatabaseFieldNames.Length);
 
                     for (var i = 0; i < joinDatabaseFieldNames.Length; i++)
                         databaseRecord.add(getDatabaseFieldInfo(recordNumber, joinDatabaseFieldNames[i], joinDatabaseName));
@@ -1152,10 +1152,10 @@ namespace HotRiot_CS
         {
             HRGetTriggerResponse jsonRecordDetailsResponse = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 string recordLink = getRecordDataString(recordNumber, "recordLink");
-                if(recordLink != null)
+                if (recordLink != null)
                     jsonRecordDetailsResponse = new HRGetTriggerResponse(await HotRiot.getHotRiotInstance.postLink(recordLink));
             }
 
@@ -1164,27 +1164,27 @@ namespace HotRiot_CS
 
         public async Task<HRSearchResponse> sortSearchResults(string fieldName)
         {
-            return await sortSearchResultsEx(null, fieldName );
+            return await sortSearchResultsEx(null, fieldName);
         }
 
         public async Task<HRSearchResponse> sortSearchResultsEx(string databaseName, string fieldName)
         {
             FieldInfo recordInfo;
 
-            if( databaseName == null )
+            if (databaseName == null)
             {
                 databaseName = getDatabaseName();
                 recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
 
                 // If I could not find the fieldname in the primary database, chack to see if it exists in any joined databases.
-                if(recordInfo == null)
+                if (recordInfo == null)
                 {
                     string[] joinDatabaseNames = getJoinDatabaseNames();
-                    if( joinDatabaseNames != null )
-                        for(var i=0; i<joinDatabaseNames.Length; i++)
+                    if (joinDatabaseNames != null)
+                        for (var i = 0; i < joinDatabaseNames.Length; i++)
                         {
                             recordInfo = getDatabaseFieldInfo(1, fieldName, joinDatabaseNames[i]);
-                            if(recordInfo != null)
+                            if (recordInfo != null)
                                 break;
                         }
                 }
@@ -1193,26 +1193,26 @@ namespace HotRiot_CS
                 if (recordInfo == null)
                 {
                     string[] triggerDatabaseNames = getTriggerDatabaseNames();
-                    if(triggerDatabaseNames != null)
-                        for(var x=0; x<triggerDatabaseNames.Length; x++)
+                    if (triggerDatabaseNames != null)
+                        for (var x = 0; x < triggerDatabaseNames.Length; x++)
                         {
                             recordInfo = getDatabaseFieldInfo(1, fieldName, triggerDatabaseNames[x]);
-                            if(recordInfo != null)
+                            if (recordInfo != null)
                                 break;
                         }
-                    }
+                }
 
                 // If a record was found with the fieldName, then post the sort link.
-                if(recordInfo != null)
+                if (recordInfo != null)
                     return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
             else
             {
                 recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
-                if(recordInfo != null)
+                if (recordInfo != null)
                     new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
-        
+
             return null;
         }
 
@@ -1248,7 +1248,7 @@ namespace HotRiot_CS
             int pageCount = getGeneralInfoInteger("pageCount");
             int pageNumber = getGeneralInfoInteger("pageNumber");
 
-            if( pageNumber != 0 && pageCount != 0 && pageNumber < pageCount )
+            if (pageNumber != 0 && pageCount != 0 && pageNumber < pageCount)
                 return true;
 
             return false;
@@ -1292,7 +1292,7 @@ namespace HotRiot_CS
             if (repost == false)
                 deleteRecordCommand = deleteRecordCommand + "&norepost=true";
 
-            if( repost == true )
+            if (repost == true)
                 return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
             else
                 return new HRDeleteResponse(await HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
@@ -1369,7 +1369,7 @@ namespace HotRiot_CS
 
         public SubscriptionDetails getSubscriptionDetails()
         {
-            if( isActionValid("userData" ) == false )
+            if (isActionValid("userData") == false)
                 return null;
 
             SubscriptionDetails subscriptionDetails = new SubscriptionDetails();
@@ -1377,22 +1377,22 @@ namespace HotRiot_CS
             subscriptionDetails.ServicePlan = getSubscriptionInfoString("servicePlan");
             subscriptionDetails.AccountStatus = getSubscriptionInfoString("accountStatus");
 
-            if( subscriptionDetails.AccountStatus.Equals("Inactive") == false && subscriptionDetails.AccountStatus.Equals("Always Active") == false )
+            if (subscriptionDetails.AccountStatus.Equals("Inactive") == false && subscriptionDetails.AccountStatus.Equals("Always Active") == false)
             {
-                if( subscriptionDetails.AccountStatus.Equals("Active for a number of days") == true )
+                if (subscriptionDetails.AccountStatus.Equals("Active for a number of days") == true)
                     subscriptionDetails.RemainingDaysActive = getSubscriptionInfoInteger("remainingdaysActive");
 
-                if( subscriptionDetails.AccountStatus.Equals("Active while account balance is positive") == true )
+                if (subscriptionDetails.AccountStatus.Equals("Active while account balance is positive") == true)
                 {
                     subscriptionDetails.CurrentAccountBalance = getSubscriptionInfoString("currentAccountBalance");
                     subscriptionDetails.DailyRate = getSubscriptionInfoString("dailyRate");
                 }
             }
 
-            if( subscriptionDetails.AccountStatus.Equals("Inactive") == false )
+            if (subscriptionDetails.AccountStatus.Equals("Inactive") == false)
             {
                 subscriptionDetails.UsageRestrictions = getSubscriptionInfoString("usageRestrictions");
-                if( subscriptionDetails.UsageRestrictions.Equals("By number of records") == true )
+                if (subscriptionDetails.UsageRestrictions.Equals("By number of records") == true)
                     subscriptionDetails.RecordStorageRestriction = getSubscriptionInfoString("recordStorageRestriction");
             }
 
@@ -1414,7 +1414,7 @@ namespace HotRiot_CS
             SubscriptionPaymentInfo subscriptionPaymentInfo = new SubscriptionPaymentInfo();
 
             int paymentCount = getPaymentCount();
-            if(paymentCount > 0 && paymentCount >= paymentNumber && paymentNumber >= 1)
+            if (paymentCount > 0 && paymentCount >= paymentNumber && paymentNumber >= 1)
             {
                 subscriptionPaymentInfo.PaymentAmount = getSubscriptionPaymentInfoString(paymentNumber, "paymentAmount");
                 subscriptionPaymentInfo.ServicePlan = getSubscriptionPaymentInfoString(paymentNumber, "servicePlan");
@@ -1454,9 +1454,9 @@ namespace HotRiot_CS
             string[] triggerFieldNames = null;
             string[] triggerDatabaseNames = getTriggerDatabaseNames();
 
-            if(triggerDatabaseNames != null)
-                for(var i=0; i<triggerDatabaseNames.Length; i++)
-                    if(triggerDatabaseNames[i] == triggerDatabaseName)
+            if (triggerDatabaseNames != null)
+                for (var i = 0; i < triggerDatabaseNames.Length; i++)
+                    if (triggerDatabaseNames[i] == triggerDatabaseName)
                     {
                         triggerFieldNames = getGeneralInfoArray("triggerFieldNames", i);
                         break;
@@ -1730,9 +1730,9 @@ namespace HotRiot_CS
             fieldInfo = new FieldInfo[fieldCount];
         }
 
-        public void add( FieldInfo fieldInfo )
+        public void add(FieldInfo fieldInfo)
         {
-            for(int i = 0; i < this.fieldInfo.Length; i++)
+            for (int i = 0; i < this.fieldInfo.Length; i++)
                 if (this.fieldInfo[i] == null)
                 {
                     this.fieldInfo[i] = fieldInfo;
@@ -1740,12 +1740,12 @@ namespace HotRiot_CS
                 }
         }
 
-        public FieldInfo getFieldInfo( string fieldName )
+        public FieldInfo getFieldInfo(string fieldName)
         {
             for (int i = 0; i < this.fieldInfo.Length; i++)
                 if (this.fieldInfo[i] != null)
                 {
-                    if( this.fieldInfo[i].FieldName.Equals( fieldName ) == true )
+                    if (this.fieldInfo[i].FieldName.Equals(fieldName) == true)
                         return this.fieldInfo[i];
                 }
 
@@ -1753,7 +1753,7 @@ namespace HotRiot_CS
         }
     }
 
-    public class FieldInfo 
+    public class FieldInfo
     {
         private string[] fieldData;
         public string this[int i]
@@ -1827,8 +1827,8 @@ namespace HotRiot_CS
         private int recordCount;
         public int RecordCount
         {
-            get{ return recordCount; }
-            set{ recordCount = value; }
+            get { return recordCount; }
+            set { recordCount = value; }
         }
         private int pageCount;
         public int PageCount
@@ -1878,7 +1878,7 @@ namespace HotRiot_CS
         }
     }
 
-    public class HotRiotJSON : JObject  
+    public class HotRiotJSON : JObject
     {
         public HotRiotJSON(JObject jObject)
             : base(jObject)
@@ -2007,7 +2007,7 @@ namespace HotRiot_CS
         }
     }
 
-    class FileMetadata
+    public class FileMetadata
     {
         private long contentLength;
         public long ContentLength

@@ -616,6 +616,14 @@ namespace HotRiot_CS
             return new HRInsertResponse(await postRequest(fullyQualifiedHRURL, recordData, files));
         }
 
+        public async Task<HRInsertResponse> deleteFile(string databaseName, string recordID, string updatePassword, string fieldName)
+        {
+            NameValueCollection recordData = new NameValueCollection();
+
+            recordData.Set(fieldName, "hsp-deletefile");
+            return await submitUpdateRecord(databaseName, recordID, updatePassword, recordData, null);
+        }
+
         public async Task<HRSearchResponse> submitSearch(string searchName, NameValueCollection searchCriterion)
         {
             searchCriterion.Set("hsp-formname", searchName);
@@ -1283,18 +1291,45 @@ namespace HotRiot_CS
 
         public async Task<HotRiotJSON> deleteRecord(int recordNumber, bool repost)
         {
-            string deleteRecordCommand = getDeleteRecordCommand(recordNumber);
-            if (deleteRecordCommand != null)
-                return await deleteRecordDirect(deleteRecordCommand, repost);
+            if (isValidRecordNumber(recordNumber) == true)
+            {
+                string deleteRecordCommand = getDeleteRecordCommand(recordNumber);
+                if (deleteRecordCommand != null)
+                    return await deleteRecordDirect(deleteRecordCommand, repost);
+                else
+                    throw new HotRiotException("Unauthorized Access.");
+            }
+
+            return null;
+        }
+
+        public async Task<HotRiotJSON> deleteFile(int recordNumber, string fieldName)
+        {
+            if (isValidRecordNumber(recordNumber) == true)
+            {
+                string recordID = getRecordID(recordNumber);
+                string updatePassword = getEditRecordPassword(recordNumber);
+                string databaseName = getDatabaseName();
+
+                if (recordID != null && updatePassword != null && databaseName != null)
+                    return await HotRiot.getHotRiotInstance.deleteFile(databaseName, recordID, updatePassword, fieldName);
+                else
+                    throw new HotRiotException("Unauthorized Access.");
+            }
 
             return null;
         }
 
         public async Task<HotRiotJSON> deleteJoinRecord(int recordNumber, string joinDatabaseName, bool repost)
         {
-            string deleteRecordCommand = getJoinDeleteRecordCommand(recordNumber, joinDatabaseName);
-            if (deleteRecordCommand != null)
-                return await deleteRecordDirect(deleteRecordCommand, repost);
+            if (isValidRecordNumber(recordNumber) == true)
+            {
+                string deleteRecordCommand = getJoinDeleteRecordCommand(recordNumber, joinDatabaseName);
+                if (deleteRecordCommand != null)
+                    return await deleteRecordDirect(deleteRecordCommand, repost);
+                else
+                    throw new HotRiotException("Unauthorized Access.");
+            }
 
             return null;
         }

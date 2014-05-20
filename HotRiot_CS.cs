@@ -1,14 +1,19 @@
 ﻿// HMAC Authentication Info: http://jokecamp.wordpress.com/2012/10/21/examples-of-creating-base64-hashes-using-hmac-sha256-in-different-languages/
 using System;
 using System.Collections.Specialized;
+using System.Collections;
 using System.IO;
 using System.Net;
+using System.Text;
 using System.Threading.Tasks;
 using Newtonsoft.Json.Linq;
 using System.Security.Cryptography;
+using Amazon.S3;
+using Amazon.S3.Model;
+using System.Windows.Media.Imaging;
 
 // Disable variable not used warning for exceptions.
-#pragma warning disable 0168  
+#pragma warning disable 0168
 
 namespace HotRiot_CS
 {
@@ -17,15 +22,18 @@ namespace HotRiot_CS
 
     public sealed class HotRiot : defines
     {
+        private PutDocumentCredentials putDocumentCredentials;
         private static HotRiot HRInstance = new HotRiot();
         private static string PROTOCOL = "https://";
+        private static int BUFFER_LENGTH = 4096;
 
         private string fullyQualifiedHRDAURL;
         private string fullyQualifiedHRURL;
+        private Hashtable fileFiledInfo;
         private string jSessionID;
         private string hmKey;
 
-        private HotRiot(){}
+        private HotRiot() { }
 
         internal static HotRiot getHotRiotInstance
         {
@@ -37,9 +45,9 @@ namespace HotRiot_CS
 
         internal async Task<HotRiotJSON> postLink(string link)
         {
+            HotRiotJSON jsonResponse = null;
             WebResponse webResponse = null;
             Stream requestStream = null;
-            HotRiotJSON jsonResponse = null;
             StreamReader reader = null;
             Stream stream = null;
 
@@ -65,31 +73,31 @@ namespace HotRiot_CS
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
             }
-               
-            catch(WebException ex )
+
+            catch (WebException ex)
             {
                 throw new HotRiotException("WebException", ex);
             }
-            catch(ArgumentNullException ex )
+            catch (ArgumentNullException ex)
             {
                 throw new HotRiotException("ArgumentNullException", ex);
             }
-            catch(OutOfMemoryException ex)
+            catch (OutOfMemoryException ex)
             {
                 throw new HotRiotException("OutOfMemoryException", ex);
             }
-            catch(IOException ex)
+            catch (IOException ex)
             {
                 throw new HotRiotException("IOException", ex);
             }
-            catch(ArgumentOutOfRangeException ex)
+            catch (ArgumentOutOfRangeException ex)
             {
                 throw new HotRiotException("ArgumentOutOfRangeException", ex);
             }
             catch (AggregateException ex)
             {
                 throw new HotRiotException("AggregateException", ex);
-            } 
+            }
             catch (Exception ex)
             {
                 throw new HotRiotException("Exception", ex);
@@ -121,12 +129,12 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
-        internal async Task<HotRiotJSON> postRequest(string url, NameValueCollection nvc, NameValueCollection files)
+        internal async Task<HotRiotJSON> postRequest(PostRequestParam prp)
         {
+            HotRiotJSON jsonResponse = null;
             WebResponse webResponse = null;
             FileStream fileStream = null;
             Stream requestStream = null;
-            HotRiotJSON jsonResponse = null;
             StreamReader reader = null;
             Stream stream = null;
 
@@ -134,7 +142,7 @@ namespace HotRiot_CS
             {
                 string boundary = "----------------------------" + DateTime.Now.Ticks.ToString("x");
 
-                HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(url + jSessionID);
+                HttpWebRequest httpWebRequest = (HttpWebRequest)WebRequest.Create(prp.url + jSessionID);
                 httpWebRequest.ContentType = "multipart/form-data; boundary=" + boundary;
                 httpWebRequest.Method = "POST";
                 httpWebRequest.KeepAlive = true;
@@ -144,40 +152,62 @@ namespace HotRiot_CS
                 string formdataTemplate = "Content-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
 
                 requestStream = await httpWebRequest.GetRequestStreamAsync();
-                foreach (string key in nvc.Keys)
+                foreach (string key in prp.nvc.Keys)
                 {
                     requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-                    string formitem = string.Format(formdataTemplate, key, nvc[key]);
+                    string formitem = string.Format(formdataTemplate, key, prp.nvc[key]);
                     byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
                     requestStream.Write(formitembytes, 0, formitembytes.Length);
                 }
 
-                requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-
-                string headerTemplate = "Content-Disposition: form-data; name=\"{0}\"; filename=\"{1}\"\r\n Content-Type: application/octet-stream\r\n\r\n";
-
-                if (files != null)
+                if (prp.files != null)
                 {
-                    byte[] buffer = new byte[4096];
-
-                    foreach (string key in files.Keys)
+                    if (putDocumentCredentials != null)
                     {
-                        string header = string.Format(headerTemplate, key, files[key]);
-                        byte[] headerbytes = System.Text.Encoding.UTF8.GetBytes(header);
-                        requestStream.Write(headerbytes, 0, headerbytes.Length);
+                        ArrayList putObjectRequests = putObjectDirect(prp);
 
-                        fileStream = new FileStream(files[key], FileMode.Open, FileAccess.Read);
-                        int bytesRead = 0;
-                        while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) != 0)
-                            requestStream.Write(buffer, 0, bytesRead);
-                        boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
+                        // This call runs asynchronous with this method. 
+                        // To execute synchronous, apply the "await" operator.
+                        putObjectDirectS3(putObjectRequests);
+
+                        foreach (string key in prp.files.Keys)
+                        {
+                            requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+                            string formitem = string.Format(formdataTemplate, key, "hsp-sharedfile=" + prp.files[key]);
+                            byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
+                            requestStream.Write(formitembytes, 0, formitembytes.Length);
+                        }
                         requestStream.Write(boundarybytes, 0, boundarybytes.Length);
 
-                        fileStream.Dispose();
-                        fileStream.Close();
-                        fileStream = null;
+                    }
+                    else
+                    {
+                        string headerTemplate = "Content-Disposition: form-data; name=\"{0}\"; filename=\"{1}\"\r\n Content-Type: application/octet-stream\r\n\r\n";
+                        requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+                        byte[] buffer = new byte[BUFFER_LENGTH];
+
+                        foreach (string key in prp.files.Keys)
+                        {
+                            string header = string.Format(headerTemplate, key, prp.files[key]);
+                            byte[] headerbytes = System.Text.Encoding.UTF8.GetBytes(header);
+                            requestStream.Write(headerbytes, 0, headerbytes.Length);
+
+                            fileStream = new FileStream(prp.files[key], FileMode.Open, FileAccess.Read);
+                            int bytesRead = 0;
+                            while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) != 0)
+                                requestStream.Write(buffer, 0, bytesRead);
+                            boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
+                            requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+
+                            fileStream.Dispose();
+                            fileStream.Close();
+                            fileStream = null;
+                        }
                     }
                 }
+                else
+                    requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+
                 requestStream.Dispose();
                 requestStream.Close();
                 requestStream = null;
@@ -257,10 +287,10 @@ namespace HotRiot_CS
 
         public async Task saveFile(string fileLink, string filePath, HTTPRequestProgressDelegate httpRequestProgressDelegate)
         {
-            long chunkSize = 4096;
+            long bufferLength = BUFFER_LENGTH;
 
+            byte[] response = new byte[bufferLength];
             HTTPProgresss httpProgresss = null;
-            byte[] response = new byte[chunkSize];
             WebResponse webResponse = null;
             BinaryReader reader = null;
             FileStream fStream = null;
@@ -281,21 +311,21 @@ namespace HotRiot_CS
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
                 webResponse = await request.GetResponseAsync();
-                if (webResponse.ContentLength < chunkSize)
-                    chunkSize = webResponse.ContentLength;
+                if (webResponse.ContentLength < bufferLength)
+                    bufferLength = webResponse.ContentLength;
                 stream = webResponse.GetResponseStream();
                 if (httpRequestProgressDelegate != null)
                     httpProgresss.TotalBytesToProcess = webResponse.ContentLength;
 
                 fStream = File.Create(filePath);
                 reader = new BinaryReader(stream);
-                while ((bytesRead = reader.Read(response, 0, (int)chunkSize)) != 0)
+                while ((bytesRead = reader.Read(response, 0, (int)bufferLength)) != 0)
                 {
                     fStream.Write(response, 0, bytesRead);
 
                     index += bytesRead;
-                    if (webResponse.ContentLength - index < chunkSize)
-                        chunkSize = webResponse.ContentLength - index;
+                    if (webResponse.ContentLength - index < bufferLength)
+                        bufferLength = webResponse.ContentLength - index;
 
                     if (httpRequestProgressDelegate != null)
                     {
@@ -380,11 +410,11 @@ namespace HotRiot_CS
         public async Task<byte[]> readFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
         {
             HTTPProgresss httpProgresss = null;
+            long bufferLength = BUFFER_LENGTH;
             WebResponse webResponse = null;
             BinaryReader reader = null;
             Stream stream = null;
             byte[] response = null;
-            long chunkSize = 4096;
             int bytesRead = 0;
             int index = 0;
 
@@ -398,19 +428,19 @@ namespace HotRiot_CS
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
                 webResponse = await request.GetResponseAsync();
-                if (webResponse.ContentLength < chunkSize)
-                    chunkSize = webResponse.ContentLength;
+                if (webResponse.ContentLength < bufferLength)
+                    bufferLength = webResponse.ContentLength;
                 response = new byte[webResponse.ContentLength];
                 stream = webResponse.GetResponseStream();
                 if (httpRequestProgressDelegate != null)
                     httpProgresss.TotalBytesToProcess = webResponse.ContentLength;
 
                 reader = new BinaryReader(stream);
-                while ((bytesRead = reader.Read(response, index, (int)chunkSize)) != 0)
+                while ((bytesRead = reader.Read(response, index, (int)bufferLength)) != 0)
                 {
                     index += bytesRead;
-                    if (webResponse.ContentLength - index < chunkSize)
-                        chunkSize = webResponse.ContentLength - index;
+                    if (webResponse.ContentLength - index < bufferLength)
+                        bufferLength = webResponse.ContentLength - index;
 
                     if (httpRequestProgressDelegate != null)
                     {
@@ -555,6 +585,151 @@ namespace HotRiot_CS
             return base64Message;
         }
 
+        private ArrayList putObjectDirect(PostRequestParam prp)
+        {
+            ArrayList putObjectRequests = new ArrayList();
+            string[] allKeys = prp.files.AllKeys;
+
+            foreach (string key in allKeys)
+            {
+                bool process = true;
+
+                try
+                {
+                    if (fileFiledInfo != null)
+                    {
+                        long fileSizeLimit = (long)fileFiledInfo[prp.databaseName + key];
+                        if (fileSizeLimit != null)
+                            if (new FileInfo(prp.files[key]).Length > fileSizeLimit)
+                                process = false;
+                    }
+                }
+                catch (Exception doNothing) { }
+
+                if (process == true)
+                {
+                    string filename = helpers.GetUniqueKey(28) + "-" + Path.GetFileName(prp.files[key]);
+                    PutObjectRequest putObjectRequest = new PutObjectRequest
+                    {
+                        BucketName = putDocumentCredentials.bucket,
+                        Key = putDocumentCredentials.key + filename,
+                        FilePath = prp.files[key]
+                    };
+
+                    putObjectRequests.Add(putObjectRequest);
+                    prp.files[key] = filename;
+                }
+            }
+
+            return putObjectRequests;
+        }
+
+        private async Task putObjectDirectS3(ArrayList putObjectRequests)
+        {
+            AmazonS3Client aS3Client = new AmazonS3Client(putDocumentCredentials.aKey, putDocumentCredentials.sKey, putDocumentCredentials.sessionToken, Amazon.RegionEndpoint.USEast1);
+            foreach (PutObjectRequest putObjectRequest in putObjectRequests)
+            {
+                try
+                {
+                    aS3Client.PutObject(putObjectRequest);
+                }
+                catch (Exception doNothing) { }
+            }
+
+            foreach (PutObjectRequest putObjectRequest in putObjectRequests)
+            {
+                try
+                {
+                    if (putObjectRequest.ContentType.Equals("image/jpeg") == true)
+                    {
+                        BitmapImage resizedImage = new BitmapImage();
+                        double scalefactor;
+                        int originWidth;
+                        int originHeight;
+
+                        // Open a Stream to get JPEG image dimensions.
+                        using (Stream imageStreamSource = new FileStream(putObjectRequest.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            BitmapDecoder decoder = BitmapDecoder.Create(imageStreamSource, BitmapCreateOptions.None, BitmapCacheOption.None);
+                            BitmapFrame frame = decoder.Frames[0];
+                            originHeight = frame.PixelHeight;
+                            originWidth = frame.PixelWidth;
+                        }
+
+                        if (originWidth > originHeight)
+                            scalefactor = putDocumentCredentials.thumbnailSize / (double)originWidth;
+                        else
+                            scalefactor = putDocumentCredentials.thumbnailSize / (double)originHeight;
+
+                        // Open a Stream and decode a JPEG thumbnail image.
+                        using (Stream imageStreamSource = new FileStream(putObjectRequest.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        {
+                            resizedImage.BeginInit();
+                            resizedImage.StreamSource = imageStreamSource;
+                            resizedImage.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                            resizedImage.DecodePixelHeight = (int)(originHeight * scalefactor);
+                            resizedImage.DecodePixelWidth = (int)(originWidth * scalefactor);
+                            resizedImage.EndInit();    // This does the actual loading and resizing
+
+                            JpegBitmapEncoder encoder = new JpegBitmapEncoder();
+                            encoder.Frames.Add(BitmapFrame.Create(resizedImage));
+                            using (MemoryStream ms = new MemoryStream())
+                            {
+                                encoder.Save(ms);
+                                putObjectRequest.InputStream = ms;
+                                int indexPos = putObjectRequest.Key.LastIndexOf("/");
+                                if (indexPos == -1)
+                                    putObjectRequest.Key = "thumbnails/" + putObjectRequest.Key;
+                                else
+                                    putObjectRequest.Key = putObjectRequest.Key.Insert(indexPos + 1, "thumbnails/");
+                                putObjectRequest.FilePath = null;
+                                putObjectRequest.Metadata.Add("Content-Length", ms.Length.ToString());
+
+                                aS3Client.PutObject(putObjectRequest);
+                            }
+                        }
+                    }
+                }
+                catch (Exception doNothing) { }
+            }
+        }
+
+        private async Task getPutDocumentCredentials()
+        {
+            if (putDocumentCredentials != null)
+                if (putDocumentCredentials.creationTime + (TimeSpan.TicksPerMinute * 14) > DateTime.Now.Ticks)
+                    return;
+
+            await submitGetPutCredentialsRequest();
+        }
+
+        private async Task submitGetPutCredentialsRequest()
+        {
+            putDocumentCredentials = null;
+
+            NameValueCollection rollSessionParameters = new NameValueCollection();
+            rollSessionParameters.Set("hsp-initializepage", "hsp-rollsessionprovider");
+            if (fileFiledInfo == null)
+                rollSessionParameters.Set("hsp-getFileFieldInfo", "hsp-getFileFieldInfo");
+
+            HRRollSessionResponse hrRollSessionResponse = new HRRollSessionResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, rollSessionParameters)));
+            if (hrRollSessionResponse.getResultCode() == 0)
+            {
+                putDocumentCredentials = new PutDocumentCredentials();
+
+                putDocumentCredentials.aKey = getGeneralInfoString(hrRollSessionResponse, "aKey");
+                putDocumentCredentials.sKey = getGeneralInfoString(hrRollSessionResponse, "sKey");
+                putDocumentCredentials.key = getGeneralInfoString(hrRollSessionResponse, "key");
+                putDocumentCredentials.bucket = getGeneralInfoString(hrRollSessionResponse, "bucket");
+                putDocumentCredentials.sessionToken = getGeneralInfoString(hrRollSessionResponse, "sessionToken");
+                putDocumentCredentials.thumbnailSize = getGeneralInfoInteger(hrRollSessionResponse, "thumbnailSize");
+                putDocumentCredentials.creationTime = DateTime.Now.Ticks;
+
+                if (fileFiledInfo == null)
+                    fileFiledInfo = hrRollSessionResponse.getFileFieldInfo();
+            }
+        }
+
         private HotRiotJSON processResponse(string unprocessedJsonResponse)
         {
             HotRiotJSON hotriotJSON = new HotRiotJSON(JObject.Parse(unprocessedJsonResponse));
@@ -581,6 +756,18 @@ namespace HotRiot_CS
             return null;
         }
 
+        private int getGeneralInfoInteger(HotRiotJSON jsonResponse, string field)
+        {
+            try
+            {
+                return (int)jsonResponse["generalInformation"][field];
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return 0;
+        }
+
         private string processDataString(string data)
         {
             if (data != null)
@@ -604,16 +791,22 @@ namespace HotRiot_CS
         // ----------------------------------- ACTION OPERATIONS ------------------------------------
         public async Task<HRInsertResponse> submitRecord(string databaseName, NameValueCollection recordData, NameValueCollection files)
         {
+            if (files != null)
+                await getPutDocumentCredentials();
+
             recordData.Set("hsp-formname", databaseName);
-            return new HRInsertResponse(await postRequest(fullyQualifiedHRURL, recordData, files));
+            return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
         }
 
         public async Task<HRInsertResponse> submitUpdateRecord(string databaseName, string recordID, string updatePassword, NameValueCollection recordData, NameValueCollection files)
         {
+            if (files != null)
+                await getPutDocumentCredentials();
+
             recordData.Set("hsp-formname", databaseName);
             recordData.Set("hsp-json", updatePassword);
             recordData.Set("hsp-recordID", recordID);
-            return new HRInsertResponse(await postRequest(fullyQualifiedHRURL, recordData, files));
+            return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
         }
 
         public async Task<HRInsertResponse> deleteFile(string databaseName, string recordID, string updatePassword, string fieldName)
@@ -627,26 +820,26 @@ namespace HotRiot_CS
         public async Task<HRSearchResponse> submitSearch(string searchName, NameValueCollection searchCriterion)
         {
             searchCriterion.Set("hsp-formname", searchName);
-            return new HRSearchResponse(await postRequest(fullyQualifiedHRURL, searchCriterion, null));
+            return new HRSearchResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, searchCriterion)));
         }
 
         public async Task<HRLoginResponse> submitLogin(string loginName, NameValueCollection loginCredentials)
         {
             loginCredentials.Set("hsp-formname", loginName);
-            return new HRLoginResponse(await postRequest(fullyQualifiedHRURL, loginCredentials, null));
+            return new HRLoginResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, loginCredentials)));
         }
 
         public async Task<HRNotificationResponse> submitNotification(string databaseName, NameValueCollection notificationData)
         {
             notificationData.Set("hsp-formname", databaseName);
             notificationData.Set("hsp-rtninsert", "1");
-            return new HRNotificationResponse(await postRequest(fullyQualifiedHRURL, notificationData, null));
+            return new HRNotificationResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, notificationData)));
         }
 
         public async Task<HRLoginLookupResponse> submitLostLoginLookup(string loginName, NameValueCollection loginLookupData)
         {
             loginLookupData.Set("hsp-formname", loginName);
-            return new HRLoginLookupResponse(await postRequest(fullyQualifiedHRURL, loginLookupData, null));
+            return new HRLoginLookupResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, loginLookupData)));
         }
 
         public async Task<HRRecordCountResponse> submitRecordCount(NameValueCollection recordCountObject)
@@ -665,15 +858,15 @@ namespace HotRiot_CS
             recordCountObject.Set("hsp-action", "recordcount");
             recordCountObject.Set("hsp-sll", sll);
             recordCountObject.Set("sinceLastLogin", "false");
-            return await postRequest(fullyQualifiedHRURL, recordCountObject, null);
+            return await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordCountObject));
         }
 
         public async Task<HRPushServiceResponse> submitPushServiceRequest(NameValueCollection pushParameters, HTTPPushRequestDelegate httpPushRequestDelegate)
         {
-            pushParameters.Set("hsp-initializepage", "mpush");
-            HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(fullyQualifiedHRURL, pushParameters, null));
+            pushParameters.Set("hsp-initializepage", "hsp-mpush");
+            HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, pushParameters)));
 
-            if (httpPushRequestDelegate != null )
+            if (httpPushRequestDelegate != null)
                 httpPushRequestDelegate(hrPushServiceResponse);
 
             return hrPushServiceResponse;
@@ -714,8 +907,8 @@ namespace HotRiot_CS
         private bool isActionValid(string validAction)
         {
             string action = getAction();
-            if(action != null && action.Equals(validAction) == true)
-                    return true;
+            if (action != null && action.Equals(validAction) == true)
+                return true;
 
             return false;
         }
@@ -799,7 +992,7 @@ namespace HotRiot_CS
                 return (int)this["generalInformation"][field];
             }
             catch (NullReferenceException doNothing) { }
-            catch (ArgumentNullException doNothing){ }
+            catch (ArgumentNullException doNothing) { }
 
             return 0;
         }
@@ -863,16 +1056,16 @@ namespace HotRiot_CS
             return retArray;
         }
 
-        private bool isValidRecordNumber( int recordNumber)
+        private bool isValidRecordNumber(int recordNumber)
         {
-            if( recordNumber > 0 )
-                if (recordNumber <= getGeneralInfoInteger("recordCount") )
+            if (recordNumber > 0)
+                if (recordNumber <= getGeneralInfoInteger("recordCount"))
                     return true;
 
             return false;
         }
 
-        private string getFieldDataString( int recordNumber, string dbFieldName)
+        private string getFieldDataString(int recordNumber, string dbFieldName)
         {
             try
             {
@@ -913,7 +1106,7 @@ namespace HotRiot_CS
 
         private string processDataString(string data)
         {
-            if(data != null)
+            if (data != null)
                 if (data.Length == 0)
                     data = null;
 
@@ -935,7 +1128,7 @@ namespace HotRiot_CS
                 recordInfo.FieldName = fieldName;
                 recordInfo.DatabaseName = databaseName;
 
-                if(recordInfo.DataCount != 0)
+                if (recordInfo.DataCount != 0)
                 {
                     JArray valueString = (JArray)jFieldInfo["value"];
                     recordInfo.allocateFieldData(valueString.Count);
@@ -946,7 +1139,7 @@ namespace HotRiot_CS
                     if (recordInfo.DataType == "File")
                     {
                         recordInfo.FileLinkURL = (string)jFieldInfo["fileLinkURL"];
-                        if((recordInfo.IsPicture = isImage(recordInfo[0])) == true)
+                        if ((recordInfo.IsPicture = isImage(recordInfo[0])) == true)
                             recordInfo.ThumbnailLinkURL = (string)jFieldInfo["thumbnailLinkURL"];
                     }
                     else
@@ -957,13 +1150,13 @@ namespace HotRiot_CS
             return recordInfo;
         }
 
-        private bool isImage( string filename )
+        private bool isImage(string filename)
         {
             string[] parts = filename.Split('.');
-            if( parts.Length > 1 )
+            if (parts.Length > 1)
             {
-                string extension = parts[parts.Length-1].ToLower();
-                if( extension.Equals("jpg") == true || extension.Equals("jpeg") == true )
+                string extension = parts[parts.Length - 1].ToLower();
+                if (extension.Equals("jpg") == true || extension.Equals("jpeg") == true)
                     return true;
             }
 
@@ -976,7 +1169,7 @@ namespace HotRiot_CS
 
             string dbFieldName = databaseName + "::" + systemFieldName;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
                 fieldData = getFieldDataString(recordNumber, dbFieldName);
 
             return fieldData;
@@ -986,22 +1179,22 @@ namespace HotRiot_CS
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 var triggerDatabaseFieldNames = getTriggerFieldNames(triggerDatabaseName);
-                if( triggerDatabaseFieldNames != null && triggerDatabaseFieldNames.Length > 0)
+                if (triggerDatabaseFieldNames != null && triggerDatabaseFieldNames.Length > 0)
                 {
-                    databaseRecord = new DatabaseRecord( triggerDatabaseFieldNames.Length );
+                    databaseRecord = new DatabaseRecord(triggerDatabaseFieldNames.Length);
 
-                    for(int i=0; i<triggerDatabaseFieldNames.Length; i++)
-                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, triggerDatabaseFieldNames[i], triggerDatabaseName) );
+                    for (int i = 0; i < triggerDatabaseFieldNames.Length; i++)
+                        databaseRecord.add(getDatabaseFieldInfo(recordNumber, triggerDatabaseFieldNames[i], triggerDatabaseName));
                 }
             }
 
             return databaseRecord;
         }
 
-/********************************************* PUBLIC API *********************************************/
+        /********************************************* PUBLIC API *********************************************/
 
         // ------------------------------------- CHECKING RESULTS -------------------------------------
         public int getResultCode()
@@ -1062,7 +1255,7 @@ namespace HotRiot_CS
         {
             String loggedInUserInfoLink = getGeneralInfoString("loggedInUserInfoLink");
 
-            if( loggedInUserInfoLink != null )
+            if (loggedInUserInfoLink != null)
                 return new HRUserDataResponse(await HotRiot.getHotRiotInstance.postLink(loggedInUserInfoLink));
 
             return null;
@@ -1116,8 +1309,8 @@ namespace HotRiot_CS
             string[] joinFieldNames = null;
             string[] joinDatabaseNames = getJoinDatabaseNames();
 
-            if( joinDatabaseNames != null )
-                for( var i=0; i<joinDatabaseNames.Length; i++ )
+            if (joinDatabaseNames != null)
+                for (var i = 0; i < joinDatabaseNames.Length; i++)
                     if (joinDatabaseNames[i] == joinDatabaseName)
                     {
                         joinFieldNames = getGeneralInfoArray("joinFieldNames", i);
@@ -1131,34 +1324,34 @@ namespace HotRiot_CS
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 string databaseName = getDatabaseName();
                 string[] databaseFieldNames = getFieldNames();
 
                 if (databaseFieldNames != null && databaseName != null)
                 {
-                    if (databaseFieldNames.Length > 0 )
-                        databaseRecord = new DatabaseRecord( databaseFieldNames.Length );
+                    if (databaseFieldNames.Length > 0)
+                        databaseRecord = new DatabaseRecord(databaseFieldNames.Length);
 
-                    for(var i=0; i<databaseFieldNames.Length; i++)
-                        databaseRecord.add( getDatabaseFieldInfo(recordNumber, databaseFieldNames[i], databaseName) );
+                    for (var i = 0; i < databaseFieldNames.Length; i++)
+                        databaseRecord.add(getDatabaseFieldInfo(recordNumber, databaseFieldNames[i], databaseName));
                 }
             }
 
             return databaseRecord;
         }
 
-        public DatabaseRecord getJoinRecord( int recordNumber, string joinDatabaseName)
+        public DatabaseRecord getJoinRecord(int recordNumber, string joinDatabaseName)
         {
             DatabaseRecord databaseRecord = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 string[] joinDatabaseFieldNames = getJoinFieldNames(joinDatabaseName);
-                if( joinDatabaseFieldNames.Length > 0 )
+                if (joinDatabaseFieldNames.Length > 0)
                 {
-                    databaseRecord = new DatabaseRecord( joinDatabaseFieldNames.Length );
+                    databaseRecord = new DatabaseRecord(joinDatabaseFieldNames.Length);
 
                     for (var i = 0; i < joinDatabaseFieldNames.Length; i++)
                         databaseRecord.add(getDatabaseFieldInfo(recordNumber, joinDatabaseFieldNames[i], joinDatabaseName));
@@ -1172,10 +1365,10 @@ namespace HotRiot_CS
         {
             HRGetTriggerResponse jsonRecordDetailsResponse = null;
 
-            if( isValidRecordNumber(recordNumber) == true )
+            if (isValidRecordNumber(recordNumber) == true)
             {
                 string recordLink = getRecordDataString(recordNumber, "recordLink");
-                if(recordLink != null)
+                if (recordLink != null)
                     jsonRecordDetailsResponse = new HRGetTriggerResponse(await HotRiot.getHotRiotInstance.postLink(recordLink));
             }
 
@@ -1184,27 +1377,27 @@ namespace HotRiot_CS
 
         public async Task<HRSearchResponse> sortSearchResults(string fieldName)
         {
-            return await sortSearchResultsEx(null, fieldName );
+            return await sortSearchResultsEx(null, fieldName);
         }
 
         public async Task<HRSearchResponse> sortSearchResultsEx(string databaseName, string fieldName)
         {
             FieldInfo recordInfo;
 
-            if( databaseName == null )
+            if (databaseName == null)
             {
                 databaseName = getDatabaseName();
                 recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
 
                 // If I could not find the fieldname in the primary database, chack to see if it exists in any joined databases.
-                if(recordInfo == null)
+                if (recordInfo == null)
                 {
                     string[] joinDatabaseNames = getJoinDatabaseNames();
-                    if( joinDatabaseNames != null )
-                        for(var i=0; i<joinDatabaseNames.Length; i++)
+                    if (joinDatabaseNames != null)
+                        for (var i = 0; i < joinDatabaseNames.Length; i++)
                         {
                             recordInfo = getDatabaseFieldInfo(1, fieldName, joinDatabaseNames[i]);
-                            if(recordInfo != null)
+                            if (recordInfo != null)
                                 break;
                         }
                 }
@@ -1213,26 +1406,26 @@ namespace HotRiot_CS
                 if (recordInfo == null)
                 {
                     string[] triggerDatabaseNames = getTriggerDatabaseNames();
-                    if(triggerDatabaseNames != null)
-                        for(var x=0; x<triggerDatabaseNames.Length; x++)
+                    if (triggerDatabaseNames != null)
+                        for (var x = 0; x < triggerDatabaseNames.Length; x++)
                         {
                             recordInfo = getDatabaseFieldInfo(1, fieldName, triggerDatabaseNames[x]);
-                            if(recordInfo != null)
+                            if (recordInfo != null)
                                 break;
                         }
-                    }
+                }
 
                 // If a record was found with the fieldName, then post the sort link.
-                if(recordInfo != null)
+                if (recordInfo != null)
                     return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
             else
             {
                 recordInfo = getDatabaseFieldInfo(1, fieldName, databaseName);
-                if(recordInfo != null)
+                if (recordInfo != null)
                     new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(recordInfo.SortLink));
             }
-        
+
             return null;
         }
 
@@ -1268,7 +1461,7 @@ namespace HotRiot_CS
             int pageCount = getGeneralInfoInteger("pageCount");
             int pageNumber = getGeneralInfoInteger("pageNumber");
 
-            if( pageNumber != 0 && pageCount != 0 && pageNumber < pageCount )
+            if (pageNumber != 0 && pageCount != 0 && pageNumber < pageCount)
                 return true;
 
             return false;
@@ -1339,7 +1532,7 @@ namespace HotRiot_CS
             if (repost == false)
                 deleteRecordCommand = deleteRecordCommand + "&norepost=true";
 
-            if( repost == true )
+            if (repost == true)
                 return new HRSearchResponse(await HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
             else
                 return new HRDeleteResponse(await HotRiot.getHotRiotInstance.postLink(deleteRecordCommand));
@@ -1416,7 +1609,7 @@ namespace HotRiot_CS
 
         public SubscriptionDetails getSubscriptionDetails()
         {
-            if( isActionValid("userData" ) == false )
+            if (isActionValid("userData") == false)
                 return null;
 
             SubscriptionDetails subscriptionDetails = new SubscriptionDetails();
@@ -1424,22 +1617,22 @@ namespace HotRiot_CS
             subscriptionDetails.ServicePlan = getSubscriptionInfoString("servicePlan");
             subscriptionDetails.AccountStatus = getSubscriptionInfoString("accountStatus");
 
-            if( subscriptionDetails.AccountStatus.Equals("Inactive") == false && subscriptionDetails.AccountStatus.Equals("Always Active") == false )
+            if (subscriptionDetails.AccountStatus.Equals("Inactive") == false && subscriptionDetails.AccountStatus.Equals("Always Active") == false)
             {
-                if( subscriptionDetails.AccountStatus.Equals("Active for a number of days") == true )
+                if (subscriptionDetails.AccountStatus.Equals("Active for a number of days") == true)
                     subscriptionDetails.RemainingDaysActive = getSubscriptionInfoInteger("remainingdaysActive");
 
-                if( subscriptionDetails.AccountStatus.Equals("Active while account balance is positive") == true )
+                if (subscriptionDetails.AccountStatus.Equals("Active while account balance is positive") == true)
                 {
                     subscriptionDetails.CurrentAccountBalance = getSubscriptionInfoString("currentAccountBalance");
                     subscriptionDetails.DailyRate = getSubscriptionInfoString("dailyRate");
                 }
             }
 
-            if( subscriptionDetails.AccountStatus.Equals("Inactive") == false )
+            if (subscriptionDetails.AccountStatus.Equals("Inactive") == false)
             {
                 subscriptionDetails.UsageRestrictions = getSubscriptionInfoString("usageRestrictions");
-                if( subscriptionDetails.UsageRestrictions.Equals("By number of records") == true )
+                if (subscriptionDetails.UsageRestrictions.Equals("By number of records") == true)
                     subscriptionDetails.RecordStorageRestriction = getSubscriptionInfoString("recordStorageRestriction");
             }
 
@@ -1461,7 +1654,7 @@ namespace HotRiot_CS
             SubscriptionPaymentInfo subscriptionPaymentInfo = new SubscriptionPaymentInfo();
 
             int paymentCount = getPaymentCount();
-            if(paymentCount > 0 && paymentCount >= paymentNumber && paymentNumber >= 1)
+            if (paymentCount > 0 && paymentCount >= paymentNumber && paymentNumber >= 1)
             {
                 subscriptionPaymentInfo.PaymentAmount = getSubscriptionPaymentInfoString(paymentNumber, "paymentAmount");
                 subscriptionPaymentInfo.ServicePlan = getSubscriptionPaymentInfoString(paymentNumber, "servicePlan");
@@ -1501,9 +1694,9 @@ namespace HotRiot_CS
             string[] triggerFieldNames = null;
             string[] triggerDatabaseNames = getTriggerDatabaseNames();
 
-            if(triggerDatabaseNames != null)
-                for(var i=0; i<triggerDatabaseNames.Length; i++)
-                    if(triggerDatabaseNames[i] == triggerDatabaseName)
+            if (triggerDatabaseNames != null)
+                for (var i = 0; i < triggerDatabaseNames.Length; i++)
+                    if (triggerDatabaseNames[i] == triggerDatabaseName)
                     {
                         triggerFieldNames = getGeneralInfoArray("triggerFieldNames", i);
                         break;
@@ -1614,6 +1807,25 @@ namespace HotRiot_CS
 
         // public string getRecordID()  Implementation in user data action.
 
+
+        // -------------------------------- ROLLSESSIONPROVIDER RECORD ACTION --------------------------------
+        public Hashtable getFileFieldInfo()
+        {
+            Hashtable fileFiledData = null;
+
+            string[] fileDataFieldNames = getGeneralInfoArray("fileDataFieldNames");
+            if (fileDataFieldNames != null)
+            {
+                string[] fileDataTableNames = getGeneralInfoArray("fileDataTableNames");
+                string[] fileDataSizeLimits = getGeneralInfoArray("fileDataSizeLimits");
+
+                fileFiledData = new Hashtable();
+                for (int i = 0; i < fileDataFieldNames.Length; i++)
+                    fileFiledData.Add(fileDataTableNames[i] + fileDataFieldNames[i], Convert.ToInt64(fileDataSizeLimits[i]));
+            }
+
+            return fileFiledData;
+        }
 
         /******************************************* END PUBLIC API *******************************************/
 
@@ -1778,9 +1990,9 @@ namespace HotRiot_CS
             fieldInfo = new FieldInfo[fieldCount];
         }
 
-        public void add( FieldInfo fieldInfo )
+        public void add(FieldInfo fieldInfo)
         {
-            for(int i = 0; i < this.fieldInfo.Length; i++)
+            for (int i = 0; i < this.fieldInfo.Length; i++)
                 if (this.fieldInfo[i] == null)
                 {
                     this.fieldInfo[i] = fieldInfo;
@@ -1788,12 +2000,12 @@ namespace HotRiot_CS
                 }
         }
 
-        public FieldInfo getFieldInfo( string fieldName )
+        public FieldInfo getFieldInfo(string fieldName)
         {
             for (int i = 0; i < this.fieldInfo.Length; i++)
                 if (this.fieldInfo[i] != null)
                 {
-                    if( this.fieldInfo[i].FieldName.Equals( fieldName ) == true )
+                    if (this.fieldInfo[i].FieldName.Equals(fieldName) == true)
                         return this.fieldInfo[i];
                 }
 
@@ -1801,7 +2013,7 @@ namespace HotRiot_CS
         }
     }
 
-    public class FieldInfo 
+    public class FieldInfo
     {
         private string[] fieldData;
         public string this[int i]
@@ -1875,8 +2087,8 @@ namespace HotRiot_CS
         private int recordCount;
         public int RecordCount
         {
-            get{ return recordCount; }
-            set{ recordCount = value; }
+            get { return recordCount; }
+            set { recordCount = value; }
         }
         private int pageCount;
         public int PageCount
@@ -1926,7 +2138,7 @@ namespace HotRiot_CS
         }
     }
 
-    public class HotRiotJSON : JObject  
+    public class HotRiotJSON : JObject
     {
         public HotRiotJSON(JObject jObject)
             : base(jObject)
@@ -2006,6 +2218,13 @@ namespace HotRiot_CS
     public class HRPushServiceResponse : HRResponse
     {
         public HRPushServiceResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRRollSessionResponse : HRResponse
+    {
+        public HRRollSessionResponse(HotRiotJSON hotRiotJSON)
             : base(hotRiotJSON)
         {
         }
@@ -2093,6 +2312,60 @@ namespace HotRiot_CS
         {
             get { return lastModified; }
             set { lastModified = value; }
+        }
+    }
+
+    public class PutDocumentCredentials
+    {
+        public string aKey;
+        public string sKey;
+        public string key;
+        public string bucket;
+        public int thumbnailSize;
+        public string sessionToken;
+        public long creationTime;
+    }
+
+    public class helpers
+    {
+        public static string GetUniqueKey(int maxSize)
+        {
+            byte[] data = new byte[1];
+            char[] chars = new char[62];
+            chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890".ToCharArray();
+
+            RNGCryptoServiceProvider crypto = new RNGCryptoServiceProvider();
+            crypto.GetNonZeroBytes(data);
+            data = new byte[maxSize];
+            crypto.GetNonZeroBytes(data);
+            StringBuilder result = new StringBuilder(maxSize);
+
+            foreach (byte b in data)
+                result.Append(chars[b % (chars.Length)]);
+
+            return result.ToString();
+        }
+    }
+
+    public class PostRequestParam
+    {
+        internal string url;
+        internal NameValueCollection nvc;
+        internal NameValueCollection files;
+        internal string databaseName;
+
+        public PostRequestParam(string url, NameValueCollection nvc, NameValueCollection files, string databaseName)
+        {
+            this.url = url;
+            this.nvc = nvc;
+            this.files = files;
+            this.databaseName = databaseName;
+        }
+
+        public PostRequestParam(string url, NameValueCollection nvc)
+        {
+            this.url = url;
+            this.nvc = nvc;
         }
     }
 }

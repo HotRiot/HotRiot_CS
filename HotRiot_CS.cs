@@ -1,16 +1,19 @@
 ﻿// HMAC Authentication Info: http://jokecamp.wordpress.com/2012/10/21/examples-of-creating-base64-hashes-using-hmac-sha256-in-different-languages/
 using System;
-using System.Collections.Specialized;
-using System.Collections;
 using System.IO;
 using System.Net;
 using System.Text;
-using System.Threading.Tasks;
+using System.Collections;
 using Newtonsoft.Json.Linq;
+using System.Threading.Tasks;
 using System.Security.Cryptography;
-using Amazon.S3;
-using Amazon.S3.Model;
-using System.Windows.Media.Imaging;
+using System.Collections.Specialized;
+
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using System.Xml.Linq;
+using System.Drawing;
 
 // Disable variable not used warning for exceptions.
 #pragma warning disable 0168
@@ -166,8 +169,8 @@ namespace HotRiot_CS
                     {
                         ArrayList putObjectRequests = putObjectDirect(prp);
 
-                        // This call runs asynchronous with this method. 
-                        // To execute synchronous, apply the "await" operator.
+                        // This call runs asynchronous with this method. T0
+                        // execute synchronous, apply the "await" operator.
                         putObjectDirectS3(putObjectRequests);
 
                         foreach (string key in prp.files.Keys)
@@ -609,14 +612,14 @@ namespace HotRiot_CS
                 if (process == true)
                 {
                     string filename = helpers.GetUniqueKey(28) + "-" + Path.GetFileName(prp.files[key]);
-                    PutObjectRequest putObjectRequest = new PutObjectRequest
+                    PutObjectRequestLocal putObjectRequestLocal = new PutObjectRequestLocal
                     {
                         BucketName = putDocumentCredentials.bucket,
                         Key = putDocumentCredentials.key + filename,
                         FilePath = prp.files[key]
                     };
 
-                    putObjectRequests.Add(putObjectRequest);
+                    putObjectRequests.Add(putObjectRequestLocal);
                     prp.files[key] = filename;
                 }
             }
@@ -624,34 +627,91 @@ namespace HotRiot_CS
             return putObjectRequests;
         }
 
-        private async Task putObjectDirectS3(ArrayList putObjectRequests)
+        private async Task putObjectDirectS3(ArrayList putObjectRequestsLocal)
         {
-            AmazonS3Client aS3Client = new AmazonS3Client(putDocumentCredentials.aKey, putDocumentCredentials.sKey, putDocumentCredentials.sessionToken, Amazon.RegionEndpoint.USEast1);
-            foreach (PutObjectRequest putObjectRequest in putObjectRequests)
+            ArrayList putObjectRequests = new ArrayList();
+
+            foreach (PutObjectRequestLocal putObjectRequestLocal in putObjectRequestsLocal)
             {
                 try
                 {
-                    aS3Client.PutObject(putObjectRequest);
+                    using (FileStream fs = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                    {
+                        S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, fs, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+                    }
                 }
                 catch (Exception doNothing) { }
             }
 
-            foreach (PutObjectRequest putObjectRequest in putObjectRequests)
+            foreach (PutObjectRequestLocal putObjectRequestLocal in putObjectRequestsLocal)
             {
                 try
                 {
-                    if (putObjectRequest.ContentType.Equals("image/jpeg") == true)
+                    string extension = Path.GetExtension(putObjectRequestLocal.Key);
+                    if (extension != null && (extension.Equals(".jpg") == true || extension.Equals(".jpeg") == true || extension.Equals(".jpe") == true))
                     {
-                        BitmapImage resizedImage = new BitmapImage();
+                        Bitmap resized = null;
                         double scalefactor;
+
+                        // Below is a less efficient method for generating thumbnails. However, this is compatable with
+                        // mono. See the commented code block below for a more efficient method for thumbnail generation.
+                        try
+                        {
+                            using (FileStream fs = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                            {
+                                using (Bitmap origBitmap = new Bitmap(fs))
+                                {
+                                    if (origBitmap.Width > origBitmap.Height)
+                                        scalefactor = putDocumentCredentials.thumbnailSize / (double)origBitmap.Width;
+                                    else
+                                        scalefactor = putDocumentCredentials.thumbnailSize / (double)origBitmap.Height;
+
+                                    resized = new Bitmap((int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor));
+                                    using (Graphics gr = Graphics.FromImage(resized))
+                                    {
+                                        gr.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                                        gr.DrawImage(origBitmap, new Rectangle(0, 0, (int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor)));
+                                    }
+                                }
+                            }
+
+                            int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+                            if (indexPos == -1)
+                                putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
+                            else
+                                putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                            putObjectRequestLocal.FilePath = null;
+
+                            using (MemoryStream ms = new MemoryStream())
+                            {
+                                System.Drawing.Imaging.EncoderParameters EncoderParameters = new System.Drawing.Imaging.EncoderParameters(1);
+                                EncoderParameters.Param[0] = new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 100L);
+                                resized.Save(ms, GetEncoderInfo("image/jpeg"), EncoderParameters);
+                                S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+                            }
+                        }
+                        finally
+                        {
+                            if (resized != null)
+                                resized.Dispose();
+                        }
+                        // End less efficient thumbnail generation.
+
+
+                        // Below is more efficient method for generating thumbnails. Currently, not compatable with
+                        // mono. If you wish to use this method for creating thumbnails, uncomment the code block below,
+                        // then comment out the less efficient method above. Finally, add the WindowsBase assembly and the 
+                        // PresentationCore assembly into your project.
+                        /* 
+                        System.Windows.Media.Imaging.BitmapImage resizedImage = new System.Windows.Media.Imaging.BitmapImage();
                         int originWidth;
                         int originHeight;
 
                         // Open a Stream to get JPEG image dimensions.
-                        using (Stream imageStreamSource = new FileStream(putObjectRequest.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        using (Stream imageStreamSource = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                         {
-                            BitmapDecoder decoder = BitmapDecoder.Create(imageStreamSource, BitmapCreateOptions.None, BitmapCacheOption.None);
-                            BitmapFrame frame = decoder.Frames[0];
+                            System.Windows.Media.Imaging.BitmapDecoder decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(imageStreamSource, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.None);
+                            System.Windows.Media.Imaging.BitmapFrame frame = decoder.Frames[0];
                             originHeight = frame.PixelHeight;
                             originWidth = frame.PixelWidth;
                         }
@@ -662,36 +722,54 @@ namespace HotRiot_CS
                             scalefactor = putDocumentCredentials.thumbnailSize / (double)originHeight;
 
                         // Open a Stream and decode a JPEG thumbnail image.
-                        using (Stream imageStreamSource = new FileStream(putObjectRequest.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                        using (Stream imageStreamSource = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                         {
                             resizedImage.BeginInit();
                             resizedImage.StreamSource = imageStreamSource;
-                            resizedImage.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
+                            resizedImage.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreColorProfile;
                             resizedImage.DecodePixelHeight = (int)(originHeight * scalefactor);
                             resizedImage.DecodePixelWidth = (int)(originWidth * scalefactor);
-                            resizedImage.EndInit();    // This does the actual loading and resizing
 
-                            JpegBitmapEncoder encoder = new JpegBitmapEncoder();
-                            encoder.Frames.Add(BitmapFrame.Create(resizedImage));
+                            // This does the actual loading and resizing. This is very efficient because the codec
+                            // will scale while decoding, rendering only those pixels that will be in the thumbnail.
+                            resizedImage.EndInit();    
+
+                            System.Windows.Media.Imaging.JpegBitmapEncoder encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+                            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(resizedImage));
                             using (MemoryStream ms = new MemoryStream())
                             {
+                                encoder.QualityLevel = 100;
                                 encoder.Save(ms);
-                                putObjectRequest.InputStream = ms;
-                                int indexPos = putObjectRequest.Key.LastIndexOf("/");
+                                int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
                                 if (indexPos == -1)
-                                    putObjectRequest.Key = "thumbnails/" + putObjectRequest.Key;
+                                    putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
                                 else
-                                    putObjectRequest.Key = putObjectRequest.Key.Insert(indexPos + 1, "thumbnails/");
-                                putObjectRequest.FilePath = null;
-                                putObjectRequest.Metadata.Add("Content-Length", ms.Length.ToString());
+                                    putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                                putObjectRequestLocal.FilePath = null;
 
-                                aS3Client.PutObject(putObjectRequest);
+                                S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
                             }
                         }
+                        // End more efficient thumbnail generation.
+                        */
                     }
                 }
                 catch (Exception doNothing) { }
             }
+        }
+
+        private static System.Drawing.Imaging.ImageCodecInfo GetEncoderInfo(String mimeType)
+        {
+            int j;
+            System.Drawing.Imaging.ImageCodecInfo[] encoders;
+            encoders = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders();
+            for (j = 0; j < encoders.Length; ++j)
+            {
+                if (encoders[j].MimeType == mimeType)
+                    return encoders[j];
+            }
+
+            return null;
         }
 
         private async Task getPutDocumentCredentials()
@@ -2366,6 +2444,313 @@ namespace HotRiot_CS
         {
             this.url = url;
             this.nvc = nvc;
+        }
+    }
+
+    public class PutObjectRequestLocal
+    {
+        public string BucketName { get; set; }
+        public string FilePath { get; set; }
+        public string Key { get; set; }
+    }
+
+    // "Create Pre Signed URL Using C# for Uploading Large Files In Amazon S3."
+    // This class is an adaptation from code posted on the following blog, 
+    // http://gauravmantri.com/2014/01/06/create-pre-signed-url-using-c-for-uploading-large-files-in-amazon-s3/
+    // Many thanks to Gaurav Mantri for making this available. http://gauravmantri.com
+    class S3
+    {
+        private static string[] subResourcesToConsider = new string[] { "acl", "lifecycle", "location", "logging", "notification", "partNumber", "policy", "requestPayment", "torrent", "uploadId", "uploads", "versionId", "versioning", "versions", "website", };
+        private static string[] overrideResponseHeadersToConsider = new string[] { "response-content-type", "response-content-language", "response-expires", "response-cache-control", "response-content-disposition", "response-content-encoding" };
+        private static int BUFFER_LENGTH = 4096;
+        private static int FIVE_MB = 5 * 1024 * 1024;
+
+
+        public static void putFile(string accessKey, string secretKey, Stream memStream, string fileName, string bucketName, string securityToken)
+        {
+            var requestUri = new Uri("https://s3-external-1.amazonaws.com/" + bucketName + "/" + fileName);
+            var expiryDate = DateTime.UtcNow.AddHours(1);
+
+            var uploadId = InitiateMultipartUpload(accessKey, secretKey, requestUri, DateTime.UtcNow.AddMinutes(10), "", securityToken);
+            var partNumberETags = UploadParts(accessKey, secretKey, requestUri, uploadId, memStream, expiryDate, securityToken);
+            FinishMultipartUpload(accessKey, secretKey, requestUri, uploadId, partNumberETags, expiryDate, securityToken);
+        }
+
+        private static string GetStringToSign(Uri requestUri, string httpVerb, string contentMD5, string contentType, DateTime date, NameValueCollection requestHeaders)
+        {
+            var canonicalizedResourceString = GetCanonicalizedResourceString(requestUri);
+            var canonicalizedAmzHeadersString = GetCanonicalizedAmzHeadersString(requestHeaders);
+            var dateInStringFormat = date.ToString("R");
+            if (requestHeaders != null && requestHeaders.AllKeys.Contains("x-amz-date"))
+                dateInStringFormat = string.Empty;
+
+            var stringToSign = string.Format("{0}\n{1}\n{2}\n{3}\n{4}{5}", httpVerb, contentMD5, contentType, dateInStringFormat, canonicalizedAmzHeadersString, canonicalizedResourceString);
+            return stringToSign;
+        }
+
+        private static string GetStringToSign(Uri requestUri, string httpVerb, string contentMD5, string contentType, long secondsSince1stJan1970, NameValueCollection requestHeaders)
+        {
+            var canonicalizedResourceString = GetCanonicalizedResourceString(requestUri);
+            var canonicalizedAmzHeadersString = GetCanonicalizedAmzHeadersString(requestHeaders);
+            var stringToSign = string.Format("{0}\n{1}\n{2}\n{3}\n{4}{5}", httpVerb, contentMD5, contentType, secondsSince1stJan1970, canonicalizedAmzHeadersString, canonicalizedResourceString);
+
+            return stringToSign;
+        }
+
+        private static string GetCanonicalizedResourceString(Uri requestUri)
+        {
+            var host = requestUri.DnsSafeHost;
+            var hostElementsArray = host.Split('.');
+            var bucketName = "";
+            if (hostElementsArray.Length > 3)
+            {
+                StringBuilder sb = new StringBuilder();
+                for (int i = 0; i < hostElementsArray.Length - 3; i++)
+                {
+                    sb.AppendFormat("{0}.", hostElementsArray[i]);
+                }
+                bucketName = sb.ToString();
+                if (bucketName.Length > 0)
+                {
+                    if (bucketName.EndsWith("."))
+                    {
+                        bucketName = bucketName.Substring(0, bucketName.Length - 1);
+                    }
+                    bucketName = string.Format("/{0}", bucketName);
+                }
+            }
+
+            var subResourcesList = subResourcesToConsider.ToList();
+            var overrideResponseHeadersList = overrideResponseHeadersToConsider.ToList();
+            StringBuilder canonicalizedResourceStringBuilder = new StringBuilder();
+            canonicalizedResourceStringBuilder.Append(bucketName);
+            canonicalizedResourceStringBuilder.Append(requestUri.AbsolutePath);
+            NameValueCollection queryVariables = HttpUtility.ParseQueryString(requestUri.Query);
+            SortedDictionary<string, string> queryVariablesToConsider = new SortedDictionary<string, string>();
+            SortedDictionary<string, string> overrideResponseHeaders = new SortedDictionary<string, string>();
+            if (queryVariables != null && queryVariables.Count > 0)
+            {
+                var numQueryItems = queryVariables.Count;
+                for (int i = 0; i < numQueryItems; i++)
+                {
+                    var key = queryVariables.GetKey(i);
+                    var value = queryVariables[key];
+                    if (subResourcesList.Contains(key))
+                    {
+                        if (queryVariablesToConsider.ContainsKey(key))
+                        {
+                            var val = queryVariablesToConsider[key];
+                            queryVariablesToConsider[key] = string.Format("{0},{1}", value, val);
+                        }
+                        else
+                        {
+                            queryVariablesToConsider.Add(key, value);
+                        }
+                    }
+                    if (overrideResponseHeadersList.Contains(key))
+                    {
+                        overrideResponseHeaders.Add(key, HttpUtility.UrlDecode(value));
+                    }
+                }
+            }
+            if (queryVariablesToConsider.Count > 0 || overrideResponseHeaders.Count > 0)
+            {
+                StringBuilder queryStringInCanonicalizedResourceString = new StringBuilder();
+                queryStringInCanonicalizedResourceString.Append("?");
+                for (int i = 0; i < queryVariablesToConsider.Count; i++)
+                {
+                    var key = queryVariablesToConsider.Keys.ElementAt(i);
+                    var value = queryVariablesToConsider.Values.ElementAt(i);
+                    if (!string.IsNullOrWhiteSpace(value))
+                    {
+                        queryStringInCanonicalizedResourceString.AppendFormat("{0}={1}&", key, value);
+                    }
+                    else
+                    {
+                        queryStringInCanonicalizedResourceString.AppendFormat("{0}&", key);
+                    }
+                }
+                for (int i = 0; i < overrideResponseHeaders.Count; i++)
+                {
+                    var key = overrideResponseHeaders.Keys.ElementAt(i);
+                    var value = overrideResponseHeaders.Values.ElementAt(i);
+                    queryStringInCanonicalizedResourceString.AppendFormat("{0}={1}&", key, value);
+                }
+                var str = queryStringInCanonicalizedResourceString.ToString();
+                if (str.EndsWith("&"))
+                {
+                    str = str.Substring(0, str.Length - 1);
+                }
+                canonicalizedResourceStringBuilder.Append(str);
+            }
+            return canonicalizedResourceStringBuilder.ToString();
+        }
+
+        private static string GetCanonicalizedAmzHeadersString(NameValueCollection requestHeaders)
+        {
+            var canonicalizedAmzHeadersString = string.Empty;
+            if (requestHeaders != null && requestHeaders.Count > 0)
+            {
+                StringBuilder sb = new StringBuilder();
+                SortedDictionary<string, string> sortedRequestHeaders = new SortedDictionary<string, string>();
+                var requestHeadersCount = requestHeaders.Count;
+                for (int i = 0; i < requestHeadersCount; i++)
+                {
+                    var key = requestHeaders.Keys.Get(i);
+                    var value = requestHeaders[key].Trim();
+                    key = key.ToLowerInvariant();
+                    if (key.StartsWith("x-amz-", StringComparison.InvariantCultureIgnoreCase))
+                    {
+                        if (sortedRequestHeaders.ContainsKey(key))
+                        {
+                            var val = sortedRequestHeaders[key];
+                            sortedRequestHeaders[key] = string.Format("{0},{1}", val, value);
+                        }
+                        else
+                        {
+                            sortedRequestHeaders.Add(key, value);
+                        }
+                    }
+                }
+                if (sortedRequestHeaders.Count > 0)
+                {
+                    foreach (var item in sortedRequestHeaders)
+                    {
+                        sb.AppendFormat("{0}:{1}\n", item.Key, item.Value);
+                    }
+                    canonicalizedAmzHeadersString = sb.ToString();
+                }
+            }
+            return canonicalizedAmzHeadersString;
+        }
+
+        private static string CreateSignature(string secretKey, string stringToSign)
+        {
+            byte[] dataToSign = Encoding.UTF8.GetBytes(stringToSign);
+            using (HMACSHA1 hmacsha1 = new HMACSHA1(Encoding.UTF8.GetBytes(secretKey)))
+            {
+                return Convert.ToBase64String(hmacsha1.ComputeHash(dataToSign));
+            }
+        }
+
+        private static string InitiateMultipartUpload(string accessKey, string secretKey, Uri requestUri, DateTime requestDate, string contentType, string securityToken)
+        {
+            var uploadId = string.Empty;
+            var uploadIdRequestUrlRequestHeaders = new NameValueCollection();
+            var uploadIdRequestUrl = new Uri(string.Format("{0}?uploads=", requestUri.AbsoluteUri));
+
+            uploadIdRequestUrlRequestHeaders.Add("x-amz-security-token", securityToken);
+            var stringToSign = GetStringToSign(uploadIdRequestUrl, "POST", string.Empty, contentType, requestDate, uploadIdRequestUrlRequestHeaders);
+            var signatureForUploadId = CreateSignature(secretKey, stringToSign);
+            uploadIdRequestUrlRequestHeaders.Add("Authorization", string.Format("AWS {0}:{1}", accessKey, signatureForUploadId));
+
+            var request = (HttpWebRequest)WebRequest.Create(uploadIdRequestUrl);
+            request.Method = "POST";
+            request.ContentLength = 0;
+            request.Date = requestDate;
+            request.ContentType = contentType;
+            request.Headers.Add(uploadIdRequestUrlRequestHeaders);
+            using (var resp = (HttpWebResponse)request.GetResponse())
+            {
+                using (var s = new StreamReader(resp.GetResponseStream()))
+                {
+                    var response = s.ReadToEnd();
+                    XElement xe = XElement.Parse(response);
+                    uploadId = xe.Element(XName.Get("UploadId", "http://s3.amazonaws.com/doc/2006-03-01/")).Value;
+                }
+            }
+
+            return uploadId;
+        }
+
+        private static Dictionary<int, string> UploadParts(string accessKey, string secretKey, Uri requestUri, string uploadId, Stream memStream, DateTime expiryDate, string securityToken)
+        {
+            Dictionary<int, string> partNumberETags = new Dictionary<int, string>();
+            TimeSpan ts = new TimeSpan(expiryDate.Ticks - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks);
+
+            var expiry = Convert.ToInt64(ts.TotalSeconds);
+            long initialBufferSize = BUFFER_LENGTH;
+            int startPosition = 0;
+            int partNumber = 1;
+
+            int bytesToBeUploaded = (int)memStream.Length;
+            byte[] fileContents = new byte[initialBufferSize];
+
+            NameValueCollection uploadIdRequestUrlRequestHeaders = new NameValueCollection();
+            uploadIdRequestUrlRequestHeaders.Add("x-amz-security-token", securityToken);
+            do
+            {
+                int bytesToUpload = Math.Min(FIVE_MB, bytesToBeUploaded);
+                var partUploadUrl = new Uri(string.Format("{0}?uploadId={1}&partNumber={2}", requestUri.AbsoluteUri, HttpUtility.UrlEncode(uploadId), partNumber));
+                var partUploadSignature = CreateSignature(secretKey, GetStringToSign(partUploadUrl, "PUT", string.Empty, string.Empty, expiry, uploadIdRequestUrlRequestHeaders));
+                var partUploadPreSignedUrl = new Uri(string.Format("{0}?uploadId={1}&partNumber={2}&AWSAccessKeyId={3}&Signature={4}&Expires={5}", requestUri.AbsoluteUri,
+                                                     HttpUtility.UrlEncode(uploadId), partNumber, accessKey, HttpUtility.UrlEncode(partUploadSignature), expiry));
+                var request = (HttpWebRequest)WebRequest.Create(partUploadPreSignedUrl);
+                request.Method = "PUT";
+                request.Timeout = 1000 * 600;
+                request.ContentLength = bytesToUpload;
+                request.Headers.Add(uploadIdRequestUrlRequestHeaders);
+
+                using (var stream = request.GetRequestStream())
+                {
+                    memStream.Position = startPosition;
+                    int offset = 0;
+                    if (initialBufferSize > bytesToBeUploaded)
+                        initialBufferSize = bytesToBeUploaded;
+
+                    while (offset < bytesToUpload)
+                    {
+                        int bytesRead = memStream.Read(fileContents, 0, (int)initialBufferSize);
+                        stream.Write(fileContents, 0, bytesRead);
+                        offset += bytesRead;
+                    }
+                }
+
+                using (var resp = (HttpWebResponse)request.GetResponse())
+                {
+                    using (var s = new StreamReader(resp.GetResponseStream()))
+                    {
+                        partNumberETags.Add(partNumber, resp.Headers["ETag"]);
+                    }
+                }
+
+                bytesToBeUploaded = bytesToBeUploaded - bytesToUpload;
+                startPosition = bytesToUpload;
+                partNumber = partNumber + 1;
+            }while (bytesToBeUploaded > 0);
+
+            return partNumberETags;
+        }
+
+        private static void FinishMultipartUpload(string accessKey, string secretKey, Uri requestUri, string uploadId, Dictionary<int, string> partNumberETags, DateTime expiryDate, string securityToken)
+        {
+            TimeSpan ts = new TimeSpan(expiryDate.Ticks - new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).Ticks);
+            var expiry = Convert.ToInt64(ts.TotalSeconds);
+            var finishOrCancelMultipartUploadUri = new Uri(string.Format("{0}?uploadId={1}", requestUri.AbsoluteUri, uploadId));
+            NameValueCollection uploadIdRequestUrlRequestHeaders = new NameValueCollection();
+            uploadIdRequestUrlRequestHeaders.Add("x-amz-security-token", securityToken);
+            var signatureForFinishMultipartUpload = CreateSignature(secretKey, GetStringToSign(finishOrCancelMultipartUploadUri, "POST", string.Empty, "text/plain", expiry, uploadIdRequestUrlRequestHeaders));
+            var finishMultipartUploadUrl = new Uri(string.Format("{0}?uploadId={1}&AWSAccessKeyId={2}&Signature={3}&Expires={4}", requestUri.AbsoluteUri, HttpUtility.UrlEncode(uploadId), accessKey, HttpUtility.UrlEncode(signatureForFinishMultipartUpload), expiry));
+            StringBuilder payload = new StringBuilder();
+            payload.Append("<?xml version=\"1.0\" encoding=\"utf-8\"?><CompleteMultipartUpload>");
+            foreach (var item in partNumberETags)
+            {
+                payload.AppendFormat("<Part><PartNumber>{0}</PartNumber><ETag>{1}</ETag></Part>", item.Key, item.Value);
+            }
+            payload.Append("</CompleteMultipartUpload>");
+            var requestPayload = Encoding.UTF8.GetBytes(payload.ToString());
+            var request = (HttpWebRequest)WebRequest.Create(finishMultipartUploadUrl);
+            request.Method = "POST";
+            request.ContentType = "text/plain";
+            request.ContentLength = requestPayload.Length;
+            request.Headers.Add(uploadIdRequestUrlRequestHeaders);
+            using (var stream = request.GetRequestStream())
+            {
+                stream.Write(requestPayload, 0, requestPayload.Length);
+            }
+            using (var resp = (HttpWebResponse)request.GetResponse())
+            {
+            }
         }
     }
 }

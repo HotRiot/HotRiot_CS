@@ -1,4 +1,9 @@
-﻿// HMAC Authentication Info: http://jokecamp.wordpress.com/2012/10/21/examples-of-creating-base64-hashes-using-hmac-sha256-in-different-languages/
+﻿
+// Uncomment the conditional compilation statement below for the type of project you are building.
+#define WINDOWS_BUILD
+//#define MONO_ANDROID_BUILD
+//#define MONO_IOS_BUILD
+
 using System;
 using System.IO;
 using System.Net;
@@ -13,7 +18,6 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Web;
 using System.Xml.Linq;
-using System.Drawing;
 
 // Disable variable not used warning for exceptions.
 #pragma warning disable 0168
@@ -65,13 +69,13 @@ namespace HotRiot_CS
                 byte[] bytes = System.Text.Encoding.UTF8.GetBytes(postData);
                 request.ContentLength = bytes.Length;
 
-                requestStream = await request.GetRequestStreamAsync();
+                requestStream = request.GetRequestStream();
                 requestStream.Write(bytes, 0, bytes.Length);
                 requestStream.Dispose();
                 requestStream.Close();
                 requestStream = null;
 
-                webResponse = await request.GetResponseAsync();
+                webResponse = request.GetResponse();
                 stream = webResponse.GetResponseStream();
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
@@ -154,7 +158,7 @@ namespace HotRiot_CS
                 byte[] boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "\r\n");
                 string formdataTemplate = "Content-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
 
-                requestStream = await httpWebRequest.GetRequestStreamAsync();
+                requestStream = httpWebRequest.GetRequestStream();
                 foreach (string key in prp.nvc.Keys)
                 {
                     requestStream.Write(boundarybytes, 0, boundarybytes.Length);
@@ -215,7 +219,7 @@ namespace HotRiot_CS
                 requestStream.Close();
                 requestStream = null;
 
-                webResponse = await httpWebRequest.GetResponseAsync();
+                webResponse = httpWebRequest.GetResponse();
                 stream = webResponse.GetResponseStream();
                 reader = new StreamReader(stream);
                 jsonResponse = processResponse(reader.ReadToEnd());
@@ -313,7 +317,7 @@ namespace HotRiot_CS
                 }
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
-                webResponse = await request.GetResponseAsync();
+                webResponse = request.GetResponse();
                 if (webResponse.ContentLength < bufferLength)
                     bufferLength = webResponse.ContentLength;
                 stream = webResponse.GetResponseStream();
@@ -430,7 +434,7 @@ namespace HotRiot_CS
                 }
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
-                webResponse = await request.GetResponseAsync();
+                webResponse = request.GetResponse();
                 if (webResponse.ContentLength < bufferLength)
                     bufferLength = webResponse.ContentLength;
                 response = new byte[webResponse.ContentLength];
@@ -519,7 +523,7 @@ namespace HotRiot_CS
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
-                webResponse = await request.GetResponseAsync();
+                webResponse = request.GetResponse();
                 fileMetadata.ContentLength = webResponse.ContentLength;
                 fileMetadata.ContentType = webResponse.ContentType;
                 fileMetadata.IsFromCache = webResponse.IsFromCache;
@@ -602,9 +606,8 @@ namespace HotRiot_CS
                     if (fileFiledInfo != null)
                     {
                         long fileSizeLimit = (long)fileFiledInfo[prp.databaseName + key];
-                        if (fileSizeLimit != null)
-                            if (new FileInfo(prp.files[key]).Length > fileSizeLimit)
-                                process = false;
+                        if (new FileInfo(prp.files[key]).Length > fileSizeLimit)
+                            process = false;
                     }
                 }
                 catch (Exception doNothing) { }
@@ -649,128 +652,218 @@ namespace HotRiot_CS
                 {
                     string extension = Path.GetExtension(putObjectRequestLocal.Key);
                     if (extension != null && (extension.Equals(".jpg") == true || extension.Equals(".jpeg") == true || extension.Equals(".jpe") == true))
-                    {
-                        Bitmap resized = null;
-                        double scalefactor;
-
-                        // Below is a less efficient method for generating thumbnails. However, this is compatable with
-                        // mono. See the commented code block below for a more efficient method for thumbnail generation.
-                        try
-                        {
-                            using (FileStream fs = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                            {
-                                using (Bitmap origBitmap = new Bitmap(fs))
-                                {
-                                    if (origBitmap.Width > origBitmap.Height)
-                                        scalefactor = putDocumentCredentials.thumbnailSize / (double)origBitmap.Width;
-                                    else
-                                        scalefactor = putDocumentCredentials.thumbnailSize / (double)origBitmap.Height;
-
-                                    resized = new Bitmap((int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor));
-                                    using (Graphics gr = Graphics.FromImage(resized))
-                                    {
-                                        gr.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                                        gr.DrawImage(origBitmap, new Rectangle(0, 0, (int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor)));
-                                    }
-                                }
-                            }
-
-                            int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
-                            if (indexPos == -1)
-                                putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
-                            else
-                                putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
-                            putObjectRequestLocal.FilePath = null;
-
-                            using (MemoryStream ms = new MemoryStream())
-                            {
-                                System.Drawing.Imaging.EncoderParameters EncoderParameters = new System.Drawing.Imaging.EncoderParameters(1);
-                                EncoderParameters.Param[0] = new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 100L);
-                                resized.Save(ms, GetEncoderInfo("image/jpeg"), EncoderParameters);
-                                S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
-                            }
-                        }
-                        finally
-                        {
-                            if (resized != null)
-                                resized.Dispose();
-                        }
-                        // End less efficient thumbnail generation.
-
-
-                        // Below is more efficient method for generating thumbnails. Currently, not compatable with
-                        // mono. If you wish to use this method for creating thumbnails, uncomment the code block below,
-                        // then comment out the less efficient method above. Finally, add the WindowsBase assembly and the 
-                        // PresentationCore assembly into your project.
-                        /* 
-                        System.Windows.Media.Imaging.BitmapImage resizedImage = new System.Windows.Media.Imaging.BitmapImage();
-                        int originWidth;
-                        int originHeight;
-
-                        // Open a Stream to get JPEG image dimensions.
-                        using (Stream imageStreamSource = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                        {
-                            System.Windows.Media.Imaging.BitmapDecoder decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(imageStreamSource, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.None);
-                            System.Windows.Media.Imaging.BitmapFrame frame = decoder.Frames[0];
-                            originHeight = frame.PixelHeight;
-                            originWidth = frame.PixelWidth;
-                        }
-
-                        if (originWidth > originHeight)
-                            scalefactor = putDocumentCredentials.thumbnailSize / (double)originWidth;
-                        else
-                            scalefactor = putDocumentCredentials.thumbnailSize / (double)originHeight;
-
-                        // Open a Stream and decode a JPEG thumbnail image.
-                        using (Stream imageStreamSource = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
-                        {
-                            resizedImage.BeginInit();
-                            resizedImage.StreamSource = imageStreamSource;
-                            resizedImage.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreColorProfile;
-                            resizedImage.DecodePixelHeight = (int)(originHeight * scalefactor);
-                            resizedImage.DecodePixelWidth = (int)(originWidth * scalefactor);
-
-                            // This does the actual loading and resizing. This is very efficient because the codec
-                            // will scale while decoding, rendering only those pixels that will be in the thumbnail.
-                            resizedImage.EndInit();    
-
-                            System.Windows.Media.Imaging.JpegBitmapEncoder encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
-                            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(resizedImage));
-                            using (MemoryStream ms = new MemoryStream())
-                            {
-                                encoder.QualityLevel = 100;
-                                encoder.Save(ms);
-                                int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
-                                if (indexPos == -1)
-                                    putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
-                                else
-                                    putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
-                                putObjectRequestLocal.FilePath = null;
-
-                                S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
-                            }
-                        }
-                        // End more efficient thumbnail generation.
-                        */
-                    }
+                        GenerateThumbnail(putObjectRequestLocal, putDocumentCredentials);
                 }
                 catch (Exception doNothing) { }
             }
         }
 
-        private static System.Drawing.Imaging.ImageCodecInfo GetEncoderInfo(String mimeType)
-        {
-            int j;
-            System.Drawing.Imaging.ImageCodecInfo[] encoders;
-            encoders = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders();
-            for (j = 0; j < encoders.Length; ++j)
-            {
-                if (encoders[j].MimeType == mimeType)
-                    return encoders[j];
-            }
 
-            return null;
+        // Below is a thumbnail generator that is intended to be used for developing windows applications, it
+        // uses asembilies from System.Drawing, which are not available in Mono. We have another thumbnail 
+        // generator for windows apps that uses the System.Windows.Media.Imaging namespace. If you prefer to  
+        // use that thumbnail generator instead of this one, please see the next method in this source file.
+#if WINDOWS_BUILD
+        private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+        {
+            double scalefactor;
+            System.Drawing.Bitmap resized = null;
+
+            try
+            {
+                using (FileStream fs = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                {
+                    using (System.Drawing.Bitmap origBitmap = new System.Drawing.Bitmap(fs))
+                    {
+                        if (origBitmap.Width > origBitmap.Height)
+                            scalefactor = putDocumentCredentials.thumbnailSize / (double)origBitmap.Width;
+                        else
+                            scalefactor = putDocumentCredentials.thumbnailSize / (double)origBitmap.Height;
+
+                        resized = new System.Drawing.Bitmap((int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor));
+                        using (System.Drawing.Graphics gr = System.Drawing.Graphics.FromImage(resized))
+                        {
+                            gr.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            gr.DrawImage(origBitmap, new System.Drawing.Rectangle(0, 0, (int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor)));
+                        }
+                    }
+                }
+
+                int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+                if (indexPos == -1)
+                    putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
+                else
+                    putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                putObjectRequestLocal.FilePath = null;
+
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    System.Drawing.Imaging.EncoderParameters EncoderParameters = new System.Drawing.Imaging.EncoderParameters(1);
+                    EncoderParameters.Param[0] = new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 100L);
+
+                    System.Drawing.Imaging.ImageCodecInfo imageCodecInfo = null;
+                    System.Drawing.Imaging.ImageCodecInfo[] encoders = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders();
+                    for (int j = 0; j < encoders.Length; ++j)
+                        if (encoders[j].MimeType == "image/jpeg")
+                        {
+                            imageCodecInfo = encoders[j];
+                            break;
+                        }
+
+                    if (imageCodecInfo != null)
+                    {
+                        resized.Save(ms, imageCodecInfo, EncoderParameters);
+                        S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+                    }
+                }
+            }
+            finally
+            {
+                if (resized != null)
+                    resized.Dispose();
+            }
         }
+#endif
+
+        // Below is a thumbnail generator that uses asembilies from System.Windows.Media.Imaging, which are not available in Mono.
+        // It is intended to be used for developing Windows applications and is an alternate thumbnail generator from the one in the  
+        // method above. You can use this one instead, if you like. If you wish to use this method for creating thumbnails, uncomment the  
+        // method below, then comment out the method above. Finally, add the WindowsBase and PresentationCore assemblys to your project.
+        /*
+#if WINDOWS_BUILD
+        private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+        {
+            double scalefactor;
+
+            // Open a Stream to get JPEG image.
+            using (Stream imageStreamSource = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                System.Windows.Media.Imaging.BitmapDecoder decoder = System.Windows.Media.Imaging.BitmapDecoder.Create(imageStreamSource, System.Windows.Media.Imaging.BitmapCreateOptions.None, System.Windows.Media.Imaging.BitmapCacheOption.None);
+                System.Windows.Media.Imaging.BitmapFrame frame = decoder.Frames[0];
+
+                if (frame.PixelWidth > frame.PixelHeight)
+                    scalefactor = putDocumentCredentials.thumbnailSize / (double)frame.PixelWidth;
+                else
+                    scalefactor = putDocumentCredentials.thumbnailSize / (double)frame.PixelHeight;
+
+                System.Windows.Media.Imaging.TransformedBitmap target = new System.Windows.Media.Imaging.TransformedBitmap(frame, new System.Windows.Media.ScaleTransform(scalefactor, scalefactor, 0, 0));
+                System.Windows.Media.Imaging.BitmapFrame resizedImage = System.Windows.Media.Imaging.BitmapFrame.Create(target);
+
+                System.Windows.Media.Imaging.JpegBitmapEncoder encoder = new System.Windows.Media.Imaging.JpegBitmapEncoder();
+                encoder.Frames.Add(resizedImage);
+
+                using (MemoryStream ms = new MemoryStream())
+                {
+                    encoder.QualityLevel = 85;
+                    encoder.Save(ms);
+                    int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+                    if (indexPos == -1)
+                        putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
+                    else
+                        putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                    putObjectRequestLocal.FilePath = null;
+
+                    S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+                }
+            }
+            // End of thumbnail generator that uses the System.Windows.Media.Imaging namespace.
+        }
+#endif
+        */
+
+#if MONO_ANDROID_BUILD
+        // Below is a thumbnail generator intended for Android Mono apps.
+		private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+		{
+			// First we get the the dimensions of the file on disk
+			Android.Graphics.BitmapFactory.Options options = new Android.Graphics.BitmapFactory.Options 
+			{ 
+				InJustDecodeBounds = true 
+			};
+			Android.Graphics.BitmapFactory.DecodeFile(putObjectRequestLocal.FilePath, options);
+
+			// Next we calculate the ratio that we need to resize the image by in order to fit the requested dimensions.
+			int outHeight = options.OutHeight;
+			int outWidth = options.OutWidth;
+			int inSampleSize = 1;
+
+			double scalefactor = 0.0;
+			if( outHeight >= 1000 || outWidth >= 1000 )
+			{
+				inSampleSize = outWidth > outHeight
+					? outHeight / putDocumentCredentials.thumbnailSize
+					: outWidth / putDocumentCredentials.thumbnailSize;
+
+				while (inSampleSize > 1 && (outHeight / inSampleSize < 500 || outHeight / inSampleSize < 500))
+					--inSampleSize;
+			}
+
+			// Now we will load the image and have BitmapFactory resize it for us.
+			options.InSampleSize = inSampleSize;
+			options.InJustDecodeBounds = false;
+
+			Android.Graphics.Bitmap resampledBitmap = Android.Graphics.BitmapFactory.DecodeFile(putObjectRequestLocal.FilePath, options);
+			if (resampledBitmap.Width >= resampledBitmap.Height)
+				scalefactor = putDocumentCredentials.thumbnailSize / (double)resampledBitmap.Width;
+			else
+				scalefactor = putDocumentCredentials.thumbnailSize / (double)resampledBitmap.Height;
+			Android.Graphics.Bitmap resizedBitmap = Android.Graphics.Bitmap.CreateScaledBitmap(resampledBitmap, (int)(resampledBitmap.Width * scalefactor), (int)(resampledBitmap.Height * scalefactor), false);
+
+			using (MemoryStream ms = new MemoryStream())
+			{
+				var rc = resizedBitmap.Compress(Android.Graphics.Bitmap.CompressFormat.Jpeg, 85, ms);
+				int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+				if (indexPos == -1)
+					putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
+				else
+					putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+				putObjectRequestLocal.FilePath = null;
+
+				S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+			}
+		}
+#endif
+
+#if MONO_IOS_BUILD
+            // Below is a thumbnail generator intended for iOS Mono apps.
+            private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+            {
+                MonoTouch.UIKit.UIImage origImg = MonoTouch.UIKit.UIImage.FromFile(putObjectRequestLocal.FilePath);
+                if (origImg.CGImage.Width > origImg.CGImage.Height)
+                    scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Width;
+                else
+                    scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Height;
+
+                System.Drawing.SizeF sizeF = new System.Drawing.SizeF(cgImage.Width * scalefactor, cgImage.Height * scalefactor );
+
+                MonoTouch.Foundation.NSData nsData = origImg.Scale(sizeF).AsJPEG();
+                using( MemoryStream ms = nsData.AsStream() )
+                {
+                    int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+                    if (indexPos == -1)
+                        putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
+                    else
+                        putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                    putObjectRequestLocal.FilePath = null;
+
+                    S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+                }
+            }
+#endif
+
+#if MONO_MAC_BUILD
+            // Below is a thumbnail generator intended for iOS Mono apps.
+            private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+            {
+                MonoMac.AppKit.NSImage origImg = MonoMac.AppKit.NSImage.ImageNamed(putObjectRequestLocal.FilePath);
+
+        
+            NSBitmapImageRep BRep=(NSBitmapImageRep)MyNSImage.Representations()[0];
+            NSDictionary Dic= NSDictionary.FromObjectAndKey(new NSNumber(Quality),NSImageCompressionFactor);
+            NSData D=BRep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Jpeg,Dic);
+            System.IO.Stream S=D.AsStream();
+            SaveStream(Location,S);        }
+#endif
 
         private async Task getPutDocumentCredentials()
         {
@@ -1100,7 +1193,7 @@ namespace HotRiot_CS
 
                     retArray = new string[fieldJArray.Count];
                     for (int i = 0; i < fieldJArray.Count; i++)
-                        retArray[i] = (String)fieldJArray[i];
+                        retArray[i] = fieldJArray[i].ToString();
                 }
             }
             catch (NullReferenceException doNothing) { }
@@ -1124,7 +1217,7 @@ namespace HotRiot_CS
 
                     retArray = new string[fieldJArray.Count];
                     for (int i = 0; i < fieldJArray.Count; i++)
-                        retArray[i] = (String)fieldJArray[i];
+                        retArray[i] = fieldJArray[i].ToString();
                 }
             }
             catch (NullReferenceException doNothing) { }

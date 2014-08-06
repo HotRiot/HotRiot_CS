@@ -1,8 +1,8 @@
 ﻿
-// Uncomment the conditional compilation statement below for the type of project you are building.
-#define WINDOWS_BUILD
-//#define MONO_ANDROID_BUILD
-//#define MONO_IOS_BUILD
+// Uncomment the conditional compilation directive below for the target platform you are building.
+#define WINDOWS_BUILD_OR_MAC_BUILD   // For building Windows, Windows Phone, and Mac applications.
+//#define ANDROID_BUILD   // For building Android applications.
+//#define IOS_BUILD  // For building iOS apps (iPhone and iPad).
 
 using System;
 using System.IO;
@@ -634,36 +634,43 @@ namespace HotRiot_CS
         {
             ArrayList putObjectRequests = new ArrayList();
 
-            foreach (PutObjectRequestLocal putObjectRequestLocal in putObjectRequestsLocal)
+            try
             {
-                try
+                foreach (PutObjectRequestLocal putObjectRequestLocal in putObjectRequestsLocal)
                 {
                     using (FileStream fs = new FileStream(putObjectRequestLocal.FilePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                     {
                         S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, fs, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
                     }
                 }
-                catch (Exception doNothing) { }
+            }
+            catch( Exception ex )
+            {
+
             }
 
-            foreach (PutObjectRequestLocal putObjectRequestLocal in putObjectRequestsLocal)
+            try
             {
-                try
+                foreach (PutObjectRequestLocal putObjectRequestLocal in putObjectRequestsLocal)
                 {
                     string extension = Path.GetExtension(putObjectRequestLocal.Key);
                     if (extension != null && (extension.Equals(".jpg") == true || extension.Equals(".jpeg") == true || extension.Equals(".jpe") == true))
                         GenerateThumbnail(putObjectRequestLocal, putDocumentCredentials);
                 }
-                catch (Exception doNothing) { }
+            }
+            catch (Exception ex)
+            {
+
             }
         }
 
 
-        // Below is a thumbnail generator that is intended to be used for developing windows applications, it
-        // uses asembilies from System.Drawing, which are not available in Mono. We have another thumbnail 
-        // generator for windows apps that uses the System.Windows.Media.Imaging namespace. If you prefer to  
-        // use that thumbnail generator instead of this one, please see the next method in this source file.
-#if WINDOWS_BUILD
+        // Below is a thumbnail generator that is intended to be used for developing Windows and/or Mac applications,
+        // it uses asembilies from System.Drawing, which are not available in MonoTouch (iOS) or MonoDroid (Android). 
+        // We have another thumbnail generator for Windows only apps, that uses the System.Windows.Media.Imaging namespace. 
+        // If you'r building for Windows, and prefer to use an alternat thumbnail generator (instead of this one), please 
+        // see the next method in this source file.
+#if WINDOWS_BUILD_OR_MAC_BUILD
         private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
         {
             double scalefactor;
@@ -725,12 +732,11 @@ namespace HotRiot_CS
         }
 #endif
 
-        // Below is a thumbnail generator that uses asembilies from System.Windows.Media.Imaging, which are not available in Mono.
-        // It is intended to be used for developing Windows applications and is an alternate thumbnail generator from the one in the  
-        // method above. You can use this one instead, if you like. If you wish to use this method for creating thumbnails, uncomment the  
-        // method below, then comment out the method above. Finally, add the WindowsBase and PresentationCore assemblys to your project.
-        /*
-#if WINDOWS_BUILD
+        // Below is a thumbnail generator that uses asembilies from System.Windows.Media.Imaging, which cannot be used for building anything
+        // but Windows applications and is an alternate thumbnail generator from the one in the method above. You can use this one instead, 
+        // if you like. If you wish to use this method for creating thumbnails, define a WINDOWS_ONLY_BUILD conditional directive at the top  
+        // of this source file. Then add the WindowsBase and PresentationCore assemblys to your project.
+#if WINDOWS_ONLY_BUILD
         private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
         {
             double scalefactor;
@@ -769,13 +775,12 @@ namespace HotRiot_CS
             // End of thumbnail generator that uses the System.Windows.Media.Imaging namespace.
         }
 #endif
-        */
 
-#if MONO_ANDROID_BUILD
+#if ANDROID_BUILD
         // Below is a thumbnail generator intended for Android Mono apps.
 		private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
 		{
-			// First we get the the dimensions of the file on disk
+			// First we get the the dimensions of the file on disk.
 			Android.Graphics.BitmapFactory.Options options = new Android.Graphics.BitmapFactory.Options 
 			{ 
 				InJustDecodeBounds = true 
@@ -824,45 +829,31 @@ namespace HotRiot_CS
 		}
 #endif
 
-#if MONO_IOS_BUILD
-            // Below is a thumbnail generator intended for iOS Mono apps.
-            private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+#if IOS_BUILD
+        // Below is a thumbnail generator intended for iOS Mono apps.
+        private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+        {
+            double scalefactor = 0.0;
+
+            MonoTouch.UIKit.UIImage origImg = MonoTouch.UIKit.UIImage.FromFile(putObjectRequestLocal.FilePath);
+            if (origImg.CGImage.Width > origImg.CGImage.Height)
+                scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Width;
+            else
+                scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Height;
+
+            System.Drawing.SizeF sizeF = new System.Drawing.SizeF((float)(origImg.CGImage.Width * scalefactor), (float)(origImg.CGImage.Height * scalefactor) );
+            MonoTouch.Foundation.NSData nsData = origImg.Scale(sizeF).AsJPEG();
+            using( System.IO.Stream ms = nsData.AsStream() )
             {
-                MonoTouch.UIKit.UIImage origImg = MonoTouch.UIKit.UIImage.FromFile(putObjectRequestLocal.FilePath);
-                if (origImg.CGImage.Width > origImg.CGImage.Height)
-                    scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Width;
+                int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+                if (indexPos == -1)
+                    putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
                 else
-                    scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Height;
-
-                System.Drawing.SizeF sizeF = new System.Drawing.SizeF(cgImage.Width * scalefactor, cgImage.Height * scalefactor );
-
-                MonoTouch.Foundation.NSData nsData = origImg.Scale(sizeF).AsJPEG();
-                using( MemoryStream ms = nsData.AsStream() )
-                {
-                    int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
-                    if (indexPos == -1)
-                        putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
-                    else
-                        putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
-                    putObjectRequestLocal.FilePath = null;
-
-                    S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
-                }
+                    putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                putObjectRequestLocal.FilePath = null;
+                S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
             }
-#endif
-
-#if MONO_MAC_BUILD
-            // Below is a thumbnail generator intended for iOS Mono apps.
-            private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
-            {
-                MonoMac.AppKit.NSImage origImg = MonoMac.AppKit.NSImage.ImageNamed(putObjectRequestLocal.FilePath);
-
-        
-            NSBitmapImageRep BRep=(NSBitmapImageRep)MyNSImage.Representations()[0];
-            NSDictionary Dic= NSDictionary.FromObjectAndKey(new NSNumber(Quality),NSImageCompressionFactor);
-            NSData D=BRep.RepresentationUsingTypeProperties(NSBitmapImageFileType.Jpeg,Dic);
-            System.IO.Stream S=D.AsStream();
-            SaveStream(Location,S);        }
+        }  
 #endif
 
         private async Task getPutDocumentCredentials()

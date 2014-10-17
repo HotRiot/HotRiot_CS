@@ -1,6 +1,6 @@
 ﻿
 // Uncomment the conditional compilation directive below for the target platform you are building.
-#define WINDOWS_BUILD_OR_MAC_BUILD   // For building Windows, Windows Phone, and Mac applications.
+#define WINDOWS_OR_MAC_BUILD   // For building Windows, Windows Phone, and Mac applications. Requires the System.Drawing assembly to be included in your project.
 //#define ANDROID_BUILD   // For building Android applications.
 //#define IOS_BUILD  // For building iOS apps (iPhone and iPad).
 
@@ -24,8 +24,8 @@ using System.Xml.Linq;
 
 namespace HotRiot_CS
 {
-    public delegate void HTTPRequestProgressDelegate(HTTPProgresss httpProgresss);
-    public delegate void HTTPPushRequestDelegate(HRPushServiceResponse hrPushServiceResponse);
+    public delegate void HTTPRequestProgressDelegate(HTTPProgress HTTPProgress);
+    public delegate void PushRequestDelegate(HRPushServiceResponse hrPushServiceResponse);
 
     public sealed class HotRiot : defines
     {
@@ -297,7 +297,7 @@ namespace HotRiot_CS
             long bufferLength = BUFFER_LENGTH;
 
             byte[] response = new byte[bufferLength];
-            HTTPProgresss httpProgresss = null;
+            HTTPProgress HTTPProgress = null;
             WebResponse webResponse = null;
             BinaryReader reader = null;
             FileStream fStream = null;
@@ -312,8 +312,8 @@ namespace HotRiot_CS
 
                 if (httpRequestProgressDelegate != null)
                 {
-                    httpProgresss = new HTTPProgresss();
-                    httpProgresss.StartTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                    HTTPProgress = new HTTPProgress();
+                    HTTPProgress.StartTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
                 }
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
@@ -322,7 +322,7 @@ namespace HotRiot_CS
                     bufferLength = webResponse.ContentLength;
                 stream = webResponse.GetResponseStream();
                 if (httpRequestProgressDelegate != null)
-                    httpProgresss.TotalBytesToProcess = webResponse.ContentLength;
+                    HTTPProgress.TotalBytesToProcess = webResponse.ContentLength;
 
                 fStream = File.Create(filePath);
                 reader = new BinaryReader(stream);
@@ -337,13 +337,13 @@ namespace HotRiot_CS
                     if (httpRequestProgressDelegate != null)
                     {
                         long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-                        httpProgresss.BytesProcessed += bytesRead;
-                        httpProgresss.TotalBytesProcessed = index;
-                        if (now - httpProgresss.StartTime > httpProgresss.ElapsTimeInMillis + 1000 || httpProgresss.TotalBytesProcessed == httpProgresss.TotalBytesToProcess)
+                        HTTPProgress.BytesProcessed += bytesRead;
+                        HTTPProgress.TotalBytesProcessed = index;
+                        if (now - HTTPProgress.StartTime > HTTPProgress.ElapsTimeInMillis + 1000 || HTTPProgress.TotalBytesProcessed == HTTPProgress.TotalBytesToProcess)
                         {
-                            httpProgresss.ElapsTimeInMillis = now - httpProgresss.StartTime;
-                            httpRequestProgressDelegate(httpProgresss);
-                            httpProgresss.BytesProcessed = 0;
+                            HTTPProgress.ElapsTimeInMillis = now - HTTPProgress.StartTime;
+                            httpRequestProgressDelegate(HTTPProgress);
+                            HTTPProgress.BytesProcessed = 0;
                         }
                     }
                 }
@@ -416,7 +416,7 @@ namespace HotRiot_CS
 
         public async Task<byte[]> readFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
         {
-            HTTPProgresss httpProgresss = null;
+            HTTPProgress HTTPProgress = null;
             long bufferLength = BUFFER_LENGTH;
             WebResponse webResponse = null;
             BinaryReader reader = null;
@@ -429,8 +429,8 @@ namespace HotRiot_CS
             {
                 if (httpRequestProgressDelegate != null)
                 {
-                    httpProgresss = new HTTPProgresss();
-                    httpProgresss.StartTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                    HTTPProgress = new HTTPProgress();
+                    HTTPProgress.StartTime = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
                 }
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
@@ -440,7 +440,7 @@ namespace HotRiot_CS
                 response = new byte[webResponse.ContentLength];
                 stream = webResponse.GetResponseStream();
                 if (httpRequestProgressDelegate != null)
-                    httpProgresss.TotalBytesToProcess = webResponse.ContentLength;
+                    HTTPProgress.TotalBytesToProcess = webResponse.ContentLength;
 
                 reader = new BinaryReader(stream);
                 while ((bytesRead = reader.Read(response, index, (int)bufferLength)) != 0)
@@ -452,13 +452,13 @@ namespace HotRiot_CS
                     if (httpRequestProgressDelegate != null)
                     {
                         long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-                        httpProgresss.BytesProcessed += bytesRead;
-                        httpProgresss.TotalBytesProcessed = index;
-                        if (now - httpProgresss.StartTime > httpProgresss.ElapsTimeInMillis + 1000 || httpProgresss.TotalBytesProcessed == httpProgresss.TotalBytesToProcess)
+                        HTTPProgress.BytesProcessed += bytesRead;
+                        HTTPProgress.TotalBytesProcessed = index;
+                        if (now - HTTPProgress.StartTime > HTTPProgress.ElapsTimeInMillis + 1000 || HTTPProgress.TotalBytesProcessed == HTTPProgress.TotalBytesToProcess)
                         {
-                            httpProgresss.ElapsTimeInMillis = now - httpProgresss.StartTime;
-                            httpRequestProgressDelegate(httpProgresss);
-                            httpProgresss.BytesProcessed = 0;
+                            HTTPProgress.ElapsTimeInMillis = now - HTTPProgress.StartTime;
+                            httpRequestProgressDelegate(HTTPProgress);
+                            HTTPProgress.BytesProcessed = 0;
                         }
                     }
                 }
@@ -669,8 +669,8 @@ namespace HotRiot_CS
         // it uses asembilies from System.Drawing, which are not available in MonoTouch (iOS) or MonoDroid (Android). 
         // We have another thumbnail generator for Windows only apps, that uses the System.Windows.Media.Imaging namespace. 
         // If you'r building for Windows, and prefer to use an alternat thumbnail generator (instead of this one), please 
-        // see the next method in this source file.
-#if WINDOWS_BUILD_OR_MAC_BUILD
+        // see the next method in this source file. Requires the System.Drawing assembly to be included in your project.
+#if WINDOWS_OR_MAC_BUILD
         private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
         {
             double scalefactor;
@@ -1023,13 +1023,72 @@ namespace HotRiot_CS
             return await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordCountObject));
         }
 
-        public async Task<HRPushServiceResponse> submitPushServiceRequest(NameValueCollection pushParameters, HTTPPushRequestDelegate httpPushRequestDelegate)
+        public async Task<HRPushServiceResponse> submitPushServiceRequest(DeviceMessagingPayload deviceMessagingPayload, ArrayList androidDeviceIDs, ArrayList iosDeviceIDs, PushRequestDelegate pushRequestDelegate)
         {
-            pushParameters.Set("hsp-initializepage", "hsp-mpush");
-            HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, pushParameters)));
+            if (deviceMessagingPayload.data == null)
+                deviceMessagingPayload.data = new NameValueCollection();
 
-            if (httpPushRequestDelegate != null)
-                httpPushRequestDelegate(hrPushServiceResponse);
+            if (androidDeviceIDs != null || iosDeviceIDs != null)
+            {
+                if (androidDeviceIDs != null)
+                    foreach (string androidDeviceID in androidDeviceIDs)
+                        if (androidDeviceID.Length != 0)
+                            deviceMessagingPayload.data.Add("hsp-androidUserDeviceID", androidDeviceID);
+
+                if (iosDeviceIDs != null)
+                    foreach (string iosDeviceID in iosDeviceIDs)
+                        if (iosDeviceID.Length != 0 )
+                            deviceMessagingPayload.data.Add("hsp-iosUserDeviceID", iosDeviceID);
+            }
+
+            if (deviceMessagingPayload.alert != null )
+                deviceMessagingPayload.data.Set("hsp-devicealert", deviceMessagingPayload.alert);
+            if (deviceMessagingPayload.badge != -1)
+                deviceMessagingPayload.data.Set("hsp-devicebadge", deviceMessagingPayload.badge.ToString());
+            if (deviceMessagingPayload.sound != null)
+                deviceMessagingPayload.data.Set("hsp-devicesound", deviceMessagingPayload.sound);
+
+            deviceMessagingPayload.data.Set("hsp-initializepage", "hsp-mpush");
+            HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, deviceMessagingPayload.data)));
+
+            if (pushRequestDelegate != null)
+                pushRequestDelegate(hrPushServiceResponse);
+
+            return hrPushServiceResponse;
+        }
+
+        public async Task<HRPushServiceResponse> submitAPNSRequest(IOSMessagingPayload iosMessagingPayload, ArrayList iosDeviceIDs, PushRequestDelegate pushRequestDelegate)
+        {
+            DeviceMessagingPayload deviceMessagingPayload = new DeviceMessagingPayload();
+
+            if (iosDeviceIDs != null)
+                foreach (string iosDeviceID in iosDeviceIDs)
+                    if (iosDeviceID.Length != 0)
+                        deviceMessagingPayload.data.Add("hsp-iosUserDeviceID", iosDeviceID);
+
+            deviceMessagingPayload.data.Add("hsp-iosrawjson", iosMessagingPayload.jsonPayload);
+            deviceMessagingPayload.data.Set("hsp-initializepage", "hsp-mpush");
+            if( iosMessagingPayload.callbackData != null )
+                deviceMessagingPayload.data.Set("hsp-callbackdata", iosMessagingPayload.callbackData);
+
+            HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, deviceMessagingPayload.data)));
+
+            if (pushRequestDelegate != null)
+                pushRequestDelegate(hrPushServiceResponse);
+
+            return hrPushServiceResponse;
+        }
+
+        public async Task<HRPushServiceResponse> submitAPNSFeedbackRequest(string callbackData)
+        {
+            DeviceMessagingPayload deviceMessagingPayload = new DeviceMessagingPayload();
+
+            deviceMessagingPayload.data.Add("hsp-iosfeedback", "true");
+            deviceMessagingPayload.data.Set("hsp-initializepage", "hsp-mpush");
+            if (callbackData != null)
+                deviceMessagingPayload.data.Set("hsp-callbackdata", callbackData);
+
+            HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, deviceMessagingPayload.data)));
 
             return hrPushServiceResponse;
         }
@@ -1962,6 +2021,79 @@ namespace HotRiot_CS
 
         // public string getCallbackData()  Implementation in insert action.
 
+        // ------------------------------------- CLOUD PUSH MESSAGING RECORD ACTION -------------------------------------
+        public int getAPNSRequestCount()
+        {
+            return getGeneralInfoInteger("totalAPNSRequests");
+        }
+
+        public int getAPNSFailureCount()
+        {
+            return getGeneralInfoInteger("totalAPNSFailures");
+        }
+
+        public APNSErrorResponse getAPNSErrorResponse(int recordNumber)
+        {
+            try
+            {
+                if (recordNumber > 0 && recordNumber <= getAPNSFailureCount())
+                {
+                    APNSErrorResponse apnsErrorResponse = new APNSErrorResponse();
+
+                    string finalRecordNumber = "error_" + recordNumber;
+                    apnsErrorResponse.errorMessage = processDataString(this["iosResponse"][finalRecordNumber]["errorMessage"].ToString());
+                    apnsErrorResponse.deviceID = processDataString(this["iosResponse"][finalRecordNumber]["deviceID"].ToString());
+                    apnsErrorResponse.exception = processDataString(this["iosResponse"][finalRecordNumber]["exception"].ToString());
+
+                    return apnsErrorResponse;
+                }
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return null;
+        }
+
+        public string[] getAPNSFeedbackList()
+        {
+            return getGeneralInfoArray("iosFeedbackList");
+        }
+
+        public int getGCMRequestCount()
+        {
+            return getGeneralInfoInteger("totalGCMRequests");
+        }
+
+        public int getGCMFailureCount()
+        {
+            return getGeneralInfoInteger("totalGCMFailures");
+        }
+
+        public GCMErrorResponse getGCMErrorResponse(int recordNumber)
+        {
+            try
+            {
+                if (recordNumber > 0 && recordNumber <= getGCMFailureCount())
+                {
+                    GCMErrorResponse gcmErrorResponse = new GCMErrorResponse();
+
+                    string finalRecordNumber = "error_" + recordNumber;
+                    gcmErrorResponse.deviceID = processDataString(this["androidResponse"][finalRecordNumber]["deviceID"].ToString());
+                    gcmErrorResponse.errorMessage = processDataString(this["androidResponse"][finalRecordNumber]["errorMessage"].ToString());
+                    gcmErrorResponse.canonicalRegistrationID = processDataString(this["androidResponse"][finalRecordNumber]["canonicalRegistrationID"].ToString());
+
+                    return gcmErrorResponse;
+                }
+            }
+            catch (NullReferenceException doNothing) { }
+            catch (ArgumentNullException doNothing) { }
+
+            return null;
+        }
+
+        // public string getCallbackData()  Implementation in insert action.
+
+
         // ------------------------------------- DELETE RECORD ACTION -------------------------------------
         // public string getDatabaseName()  Implementation in search action.
 
@@ -2017,6 +2149,10 @@ namespace HotRiot_CS
         public const int INVALID_REQUEST = 18;
         public const int ANONYMOUS_USER_EXCEPTION = 19;
         public const int INVALID_UPDATE_CREDENTIALS = 20;
+        public const int MISSING_CLOUD_MESSAGING_PROPERTIES = 21;
+        public const int CLOUD_MESSAGING_IO_EXCEPTION = 22;
+        public const int CLOUD_MESSAGING_GENERAL_EXCEPTION = 23;
+        public const int INVALID_CLOUD_MESSAGING_REQUEST = 24;
     }
 
     public class RecordCountParameters
@@ -2409,7 +2545,7 @@ namespace HotRiot_CS
         }
     }
 
-    public class HTTPProgresss
+    public class HTTPProgress
     {
         private long totalBytesProcessed;
         public long TotalBytesProcessed
@@ -2536,6 +2672,34 @@ namespace HotRiot_CS
         public string BucketName { get; set; }
         public string FilePath { get; set; }
         public string Key { get; set; }
+    }
+
+    public class DeviceMessagingPayload
+    {
+        public NameValueCollection data = new NameValueCollection();
+        public string alert;
+        public int badge = -1;
+        public string sound;
+    }
+    
+    public class IOSMessagingPayload
+    {
+        public string jsonPayload;
+        public string callbackData;
+    }
+
+    public class APNSErrorResponse
+    {
+        public string errorMessage;
+        public string deviceID;
+        public string exception;
+    }
+
+    public class GCMErrorResponse
+    {
+        public string errorMessage;
+        public string deviceID;
+        public string canonicalRegistrationID;
     }
 
     // "Create Pre Signed URL Using C# for Uploading Large Files In Amazon S3."

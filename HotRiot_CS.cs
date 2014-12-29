@@ -690,6 +690,9 @@ namespace HotRiot_CS
                         resized = new System.Drawing.Bitmap((int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor));
                         using (System.Drawing.Graphics gr = System.Drawing.Graphics.FromImage(resized))
                         {
+                            gr.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceCopy;
+                            gr.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                            gr.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
                             gr.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
                             gr.DrawImage(origBitmap, new System.Drawing.Rectangle(0, 0, (int)(origBitmap.Width * scalefactor), (int)(origBitmap.Height * scalefactor)));
                         }
@@ -1047,6 +1050,8 @@ namespace HotRiot_CS
                 deviceMessagingPayload.data.Set("hsp-devicebadge", deviceMessagingPayload.badge.ToString());
             if (deviceMessagingPayload.sound != null)
                 deviceMessagingPayload.data.Set("hsp-devicesound", deviceMessagingPayload.sound);
+            if (deviceMessagingPayload.contentAvailable != -1)
+                deviceMessagingPayload.data.Set("hsp-devicecontentavailable", deviceMessagingPayload.contentAvailable.ToString());
 
             deviceMessagingPayload.data.Set("hsp-initializepage", "hsp-mpush");
             HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, deviceMessagingPayload.data)));
@@ -2680,6 +2685,7 @@ namespace HotRiot_CS
         public string alert;
         public int badge = -1;
         public string sound;
+        public int contentAvailable = -1;
     }
     
     public class IOSMessagingPayload

@@ -50,7 +50,9 @@ namespace HotRiot_CS
             }
         }
 
+#pragma warning disable 1998
         internal async Task<HotRiotJSON> postLink(string link)
+#pragma warning restore 1998
         {
             HotRiotJSON jsonResponse = null;
             WebResponse webResponse = null;
@@ -136,7 +138,9 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
+#pragma warning disable 1998
         internal async Task<HotRiotJSON> postRequest(PostRequestParam prp)
+#pragma warning restore 1998
         {
             HotRiotJSON jsonResponse = null;
             WebResponse webResponse = null;
@@ -175,7 +179,9 @@ namespace HotRiot_CS
 
                         // This call runs asynchronous with this method. T0
                         // execute synchronous, apply the "await" operator.
+#pragma warning disable 4014
                         putObjectDirectS3(putObjectRequests);
+#pragma warning restore 4014
 
                         foreach (string key in prp.files.Keys)
                         {
@@ -292,7 +298,10 @@ namespace HotRiot_CS
             return jsonResponse;
         }
 
+
+#pragma warning disable 1998
         public async Task saveFile(string fileLink, string filePath, HTTPRequestProgressDelegate httpRequestProgressDelegate)
+#pragma warning restore 1998
         {
             long bufferLength = BUFFER_LENGTH;
 
@@ -414,7 +423,9 @@ namespace HotRiot_CS
             }
         }
 
+#pragma warning disable 1998
         public async Task<byte[]> readFile(string fileLink, HTTPRequestProgressDelegate httpRequestProgressDelegate)
+#pragma warning restore 1998
         {
             HTTPProgress HTTPProgress = null;
             long bufferLength = BUFFER_LENGTH;
@@ -514,7 +525,9 @@ namespace HotRiot_CS
             return response;
         }
 
+#pragma warning disable 1998
         public async Task<FileMetadata> getFileMetadata(string fileLink)
+#pragma warning restore 1998
         {
             FileMetadata fileMetadata = new FileMetadata();
             WebResponse webResponse = null;
@@ -630,7 +643,9 @@ namespace HotRiot_CS
             return putObjectRequests;
         }
 
+#pragma warning disable 1998
         private async Task putObjectDirectS3(ArrayList putObjectRequestsLocal)
+#pragma warning restore 1998
         {
             ArrayList putObjectRequests = new ArrayList();
 
@@ -644,7 +659,7 @@ namespace HotRiot_CS
                     }
                 }
             }
-            catch( Exception ex )
+            catch (Exception ex)
             {
 
             }
@@ -781,55 +796,55 @@ namespace HotRiot_CS
 
 #if ANDROID_BUILD
         // Below is a thumbnail generator intended for Android Mono apps.
-		private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
-		{
-			// First we get the the dimensions of the file on disk.
-			Android.Graphics.BitmapFactory.Options options = new Android.Graphics.BitmapFactory.Options 
-			{ 
-				InJustDecodeBounds = true 
-			};
-			Android.Graphics.BitmapFactory.DecodeFile(putObjectRequestLocal.FilePath, options);
+        private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
+        {
+            // First we get the the dimensions of the file on disk.
+            Android.Graphics.BitmapFactory.Options options = new Android.Graphics.BitmapFactory.Options
+            {
+                InJustDecodeBounds = true
+            };
+            Android.Graphics.BitmapFactory.DecodeFile(putObjectRequestLocal.FilePath, options);
 
-			// Next we calculate the ratio that we need to resize the image by in order to fit the requested dimensions.
-			int outHeight = options.OutHeight;
-			int outWidth = options.OutWidth;
-			int inSampleSize = 1;
+            // Next we calculate the ratio that we need to resize the image by in order to fit the requested dimensions.
+            int outHeight = options.OutHeight;
+            int outWidth = options.OutWidth;
+            int inSampleSize = 1;
 
-			double scalefactor = 0.0;
-			if( outHeight >= 1000 || outWidth >= 1000 )
-			{
-				inSampleSize = outWidth > outHeight
-					? outHeight / putDocumentCredentials.thumbnailSize
-					: outWidth / putDocumentCredentials.thumbnailSize;
+            double scalefactor = 0.0;
+            if (outHeight >= 1000 || outWidth >= 1000)
+            {
+                inSampleSize = outWidth > outHeight
+                    ? outHeight / putDocumentCredentials.thumbnailSize
+                    : outWidth / putDocumentCredentials.thumbnailSize;
 
-				while (inSampleSize > 1 && (outHeight / inSampleSize < 500 || outHeight / inSampleSize < 500))
-					--inSampleSize;
-			}
+                while (inSampleSize > 1 && (outHeight / inSampleSize < 500 || outHeight / inSampleSize < 500))
+                    --inSampleSize;
+            }
 
-			// Now we will load the image and have BitmapFactory resize it for us.
-			options.InSampleSize = inSampleSize;
-			options.InJustDecodeBounds = false;
+            // Now we will load the image and have BitmapFactory resize it for us.
+            options.InSampleSize = inSampleSize;
+            options.InJustDecodeBounds = false;
 
-			Android.Graphics.Bitmap resampledBitmap = Android.Graphics.BitmapFactory.DecodeFile(putObjectRequestLocal.FilePath, options);
-			if (resampledBitmap.Width >= resampledBitmap.Height)
-				scalefactor = putDocumentCredentials.thumbnailSize / (double)resampledBitmap.Width;
-			else
-				scalefactor = putDocumentCredentials.thumbnailSize / (double)resampledBitmap.Height;
-			Android.Graphics.Bitmap resizedBitmap = Android.Graphics.Bitmap.CreateScaledBitmap(resampledBitmap, (int)(resampledBitmap.Width * scalefactor), (int)(resampledBitmap.Height * scalefactor), false);
+            Android.Graphics.Bitmap resampledBitmap = Android.Graphics.BitmapFactory.DecodeFile(putObjectRequestLocal.FilePath, options);
+            if (resampledBitmap.Width >= resampledBitmap.Height)
+                scalefactor = putDocumentCredentials.thumbnailSize / (double)resampledBitmap.Width;
+            else
+                scalefactor = putDocumentCredentials.thumbnailSize / (double)resampledBitmap.Height;
+            Android.Graphics.Bitmap resizedBitmap = Android.Graphics.Bitmap.CreateScaledBitmap(resampledBitmap, (int)(resampledBitmap.Width * scalefactor), (int)(resampledBitmap.Height * scalefactor), false);
 
-			using (MemoryStream ms = new MemoryStream())
-			{
-				var rc = resizedBitmap.Compress(Android.Graphics.Bitmap.CompressFormat.Jpeg, 85, ms);
-				int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
-				if (indexPos == -1)
-					putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
-				else
-					putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
-				putObjectRequestLocal.FilePath = null;
+            using (MemoryStream ms = new MemoryStream())
+            {
+                var rc = resizedBitmap.Compress(Android.Graphics.Bitmap.CompressFormat.Jpeg, 85, ms);
+                int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
+                if (indexPos == -1)
+                    putObjectRequestLocal.Key = "thumbnails/" + putObjectRequestLocal.Key;
+                else
+                    putObjectRequestLocal.Key = putObjectRequestLocal.Key.Insert(indexPos + 1, "thumbnails/");
+                putObjectRequestLocal.FilePath = null;
 
-				S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
-			}
-		}
+                S3.putFile(putDocumentCredentials.aKey, putDocumentCredentials.sKey, ms, putObjectRequestLocal.Key, putObjectRequestLocal.BucketName, putDocumentCredentials.sessionToken);
+            }
+        }
 #endif
 
 #if IOS_BUILD
@@ -974,6 +989,28 @@ namespace HotRiot_CS
             return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
         }
 
+        public async Task<HRInsertResponse> submitUpdateRecord(string databaseName, string editKey, NameValueCollection recordData, NameValueCollection files)
+        {
+            if (files != null)
+                await getPutDocumentCredentials();
+
+            recordData.Set("hsp-formname", databaseName);
+            recordData.Set("hsp-recordID", editKey);
+            return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
+        }
+
+        public async Task<HRDeleteResponse> submitDeleteRecord(string databaseName, NameValueCollection recordData)
+        {
+            String[] allkeys = recordData.AllKeys;
+
+            recordData.Set("hsp-formname", databaseName);
+            recordData.Set("hsp-recordID", allkeys[0]);
+            recordData.Set("hsp-delrec", "1");
+            recordData.Set("norepost", "true");
+            recordData.Set("nextPage", "0");
+            return new HRDeleteResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, null, databaseName)));
+        }
+
         public async Task<HRInsertResponse> deleteFile(string databaseName, string recordID, string updatePassword, string fieldName)
         {
             NameValueCollection recordData = new NameValueCollection();
@@ -1040,11 +1077,11 @@ namespace HotRiot_CS
 
                 if (iosDeviceIDs != null)
                     foreach (string iosDeviceID in iosDeviceIDs)
-                        if (iosDeviceID.Length != 0 )
+                        if (iosDeviceID.Length != 0)
                             deviceMessagingPayload.data.Add("hsp-iosUserDeviceID", iosDeviceID);
             }
 
-            if (deviceMessagingPayload.alert != null )
+            if (deviceMessagingPayload.alert != null)
                 deviceMessagingPayload.data.Set("hsp-devicealert", deviceMessagingPayload.alert);
             if (deviceMessagingPayload.badge != -1)
                 deviceMessagingPayload.data.Set("hsp-devicebadge", deviceMessagingPayload.badge.ToString());
@@ -1073,7 +1110,7 @@ namespace HotRiot_CS
 
             deviceMessagingPayload.data.Add("hsp-iosrawjson", iosMessagingPayload.jsonPayload);
             deviceMessagingPayload.data.Set("hsp-initializepage", "hsp-mpush");
-            if( iosMessagingPayload.callbackData != null )
+            if (iosMessagingPayload.callbackData != null)
                 deviceMessagingPayload.data.Set("hsp-callbackdata", iosMessagingPayload.callbackData);
 
             HRPushServiceResponse hrPushServiceResponse = new HRPushServiceResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, deviceMessagingPayload.data)));
@@ -2687,7 +2724,7 @@ namespace HotRiot_CS
         public string sound;
         public int contentAvailable = -1;
     }
-    
+
     public class IOSMessagingPayload
     {
         public string jsonPayload;
@@ -2971,7 +3008,7 @@ namespace HotRiot_CS
                 bytesToBeUploaded = bytesToBeUploaded - bytesToUpload;
                 startPosition = bytesToUpload;
                 partNumber = partNumber + 1;
-            }while (bytesToBeUploaded > 0);
+            } while (bytesToBeUploaded > 0);
 
             return partNumberETags;
         }

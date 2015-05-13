@@ -989,7 +989,7 @@ namespace HotRiot_CS
             return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
         }
 
-        public async Task<HRInsertResponse> submitUpdateRecord(string databaseName, string editKey, NameValueCollection recordData, NameValueCollection files)
+        public async Task<HRInsertResponse> submitKeyUpdateRecord(string databaseName, string editKey, NameValueCollection recordData, NameValueCollection files)
         {
             if (files != null)
                 await getPutDocumentCredentials();
@@ -1004,7 +1004,14 @@ namespace HotRiot_CS
             String[] allkeys = recordData.AllKeys;
 
             recordData.Set("hsp-formname", databaseName);
-            recordData.Set("hsp-recordID", allkeys[0]);
+            foreach (string key in allkeys)
+            {
+                if (key.StartsWith("hsp-") == false)
+                {
+                    recordData.Set("hsp-recordID", recordData[key]);
+                    break;
+                }
+            }
             recordData.Set("hsp-delrec", "1");
             recordData.Set("norepost", "true");
             recordData.Set("nextPage", "0");

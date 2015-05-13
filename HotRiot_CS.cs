@@ -999,6 +999,18 @@ namespace HotRiot_CS
             return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
         }
 
+        public async Task<HRInsertResponse> submitKeyUpdateInsertRecord(string databaseName, string editKey, NameValueCollection recordData, NameValueCollection files)
+        {
+            if (files != null)
+                await getPutDocumentCredentials();
+
+            recordData.Set("hsp-formname", databaseName);
+            recordData.Set("hsp-recordID", editKey);
+            recordData.Set("hsp-replaceinto", "true");
+            
+            return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
+        }
+
         public async Task<HRDeleteResponse> submitDeleteRecord(string databaseName, NameValueCollection recordData)
         {
             String[] allkeys = recordData.AllKeys;

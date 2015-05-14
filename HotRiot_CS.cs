@@ -1020,7 +1020,7 @@ namespace HotRiot_CS
             {
                 if (key.StartsWith("hsp-") == false)
                 {
-                    recordData.Set("hsp-recordID", recordData[key]);
+                    recordData.Set("hsp-recordID", key);
                     break;
                 }
             }

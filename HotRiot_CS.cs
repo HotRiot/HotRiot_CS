@@ -852,15 +852,22 @@ namespace HotRiot_CS
         private static void GenerateThumbnail(PutObjectRequestLocal putObjectRequestLocal, PutDocumentCredentials putDocumentCredentials)
         {
             double scalefactor = 0.0;
-
+#if __UNIFIED__
+			UIKit.UIImage origImg = UIKit.UIImage.FromFile(putObjectRequestLocal.FilePath);
+#else
             MonoTouch.UIKit.UIImage origImg = MonoTouch.UIKit.UIImage.FromFile(putObjectRequestLocal.FilePath);
+#endif
             if (origImg.CGImage.Width > origImg.CGImage.Height)
                 scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Width;
             else
                 scalefactor = putDocumentCredentials.thumbnailSize / (double)origImg.CGImage.Height;
-
+#if __UNIFIED__
+			CoreGraphics.CGSize sizeF = new CoreGraphics.CGSize((nfloat)(origImg.CGImage.Width * scalefactor), (nfloat)(origImg.CGImage.Height * scalefactor) );
+			Foundation.NSData nsData = origImg.Scale (sizeF).AsJPEG ();
+#else
             System.Drawing.SizeF sizeF = new System.Drawing.SizeF((float)(origImg.CGImage.Width * scalefactor), (float)(origImg.CGImage.Height * scalefactor) );
             MonoTouch.Foundation.NSData nsData = origImg.Scale(sizeF).AsJPEG();
+#endif
             using( System.IO.Stream ms = nsData.AsStream() )
             {
                 int indexPos = putObjectRequestLocal.Key.LastIndexOf("/");
@@ -1011,7 +1018,7 @@ namespace HotRiot_CS
             return new HRInsertResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData, files, databaseName)));
         }
 
-        public async Task<HRDeleteResponse> submitDeleteRecord(string databaseName, NameValueCollection recordData)
+        public async Task<HRDeleteResponse> submitKeyDeleteRecord(string databaseName, NameValueCollection recordData)
         {
             String[] allkeys = recordData.AllKeys;
 
@@ -1036,6 +1043,15 @@ namespace HotRiot_CS
 
             recordData.Set(fieldName, "hsp-deletefile");
             return await submitUpdateRecord(databaseName, recordID, updatePassword, recordData, null);
+        }
+
+        public async Task<HRInsertResponse> keyDeleteFile(string databaseName, string editKey, string editKeyValue, string fileFieldName)
+        {
+            NameValueCollection recordData = new NameValueCollection();
+
+            recordData.Set(fileFieldName, "hsp-deletefile");
+            recordData.Set(editKey, editKeyValue);
+            return await submitKeyUpdateRecord(databaseName, editKey, recordData, null);
         }
 
         public async Task<HRSearchResponse> submitSearch(string searchName, NameValueCollection searchCriterion)
@@ -1164,6 +1180,14 @@ namespace HotRiot_CS
 
             return new HRLogoutResponse(await postLink(fullyQualifiedHRDAURL + "?hsp-logout=hsp-json" + callbackData));
 
+        }
+
+        public async Task<HRMetadataResponse> submitGetMetadata(string databaseName)
+        {
+            NameValueCollection recordData = new NameValueCollection();
+            recordData.Set("hsp-formname", databaseName);
+            recordData.Set("hsp-initializepage", "hsp-dbmd");
+            return new HRMetadataResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, recordData)));
         }
 
         // Helper Method.
@@ -1584,6 +1608,11 @@ namespace HotRiot_CS
         public string[] getFieldNames()
         {
             return getGeneralInfoArray("databaseFieldNames");
+        }
+
+        public string[] getFieldTypes()
+        {
+            return getGeneralInfoArray("databaseFieldTypes");
         }
 
         public string[] getJoinFieldNames(string joinDatabaseName)
@@ -2163,6 +2192,12 @@ namespace HotRiot_CS
         // public string getRecordID()  Implementation in user data action.
 
 
+        // ------------------------------------- DATABASEMETADATA RECORD ACTION -------------------------------------
+        //public string[] getFieldNames()  Implementation in search action.
+
+        //public string[] getFieldTypes()  Implementation in search action.
+
+
         // -------------------------------- ROLLSESSIONPROVIDER RECORD ACTION --------------------------------
         public Hashtable getFileFieldInfo()
         {
@@ -2584,6 +2619,13 @@ namespace HotRiot_CS
     public class HRRollSessionResponse : HRResponse
     {
         public HRRollSessionResponse(HotRiotJSON hotRiotJSON)
+            : base(hotRiotJSON)
+        {
+        }
+    }
+    public class HRMetadataResponse : HRResponse
+    {
+        public HRMetadataResponse(HotRiotJSON hotRiotJSON)
             : base(hotRiotJSON)
         {
         }

@@ -17,7 +17,7 @@ iOS
 
 At the top of the HotRiot_CS.cs file are three conditional compilation directives, they are:
 
-&#35;define  WINDOWS_OR_MAC_BUILD
+&#35;define  WINDOWS_OR_MAC_BUILD<br>
 &#35;define  ANDROID_BUILD
 &#35;define  IOS_BUILD
 

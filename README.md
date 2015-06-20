@@ -10,9 +10,9 @@ https://json.codeplex.com/releases/view/117958
 
 The HotRiot API includes platform specific code for creating thumbnail images. This code targets the following four platforms:
 
-Windows
-Android
-Mac
+Windows<br>
+Android<br>
+Mac<br>
 iOS
 
 At the top of the HotRiot_CS.cs file are three conditional compilation directives, they are:

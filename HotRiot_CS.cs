@@ -55,10 +55,6 @@ namespace HotRiot_CS
 #pragma warning restore 1998
         {
             HotRiotJSON jsonResponse = null;
-            WebResponse webResponse = null;
-            Stream requestStream = null;
-            StreamReader reader = null;
-            Stream stream = null;
 
             try
             {
@@ -71,16 +67,21 @@ namespace HotRiot_CS
                 byte[] bytes = System.Text.Encoding.UTF8.GetBytes(postData);
                 request.ContentLength = bytes.Length;
 
-                requestStream = request.GetRequestStream();
-                requestStream.Write(bytes, 0, bytes.Length);
-                requestStream.Dispose();
-                requestStream.Close();
-                requestStream = null;
+                using (Stream requestStream = request.GetRequestStream())
+                {
+                    requestStream.Write(bytes, 0, bytes.Length);
+                }
 
-                webResponse = request.GetResponse();
-                stream = webResponse.GetResponseStream();
-                reader = new StreamReader(stream);
-                jsonResponse = processResponse(reader.ReadToEnd());
+                using (WebResponse webResponse = request.GetResponse())
+                {
+                    using (Stream stream = webResponse.GetResponseStream())
+                    {
+                        using (StreamReader reader = new StreamReader(stream))
+                        {
+                            jsonResponse = processResponse(reader.ReadToEnd());
+                        }
+                    }
+                }
             }
 
             catch (WebException ex)
@@ -113,26 +114,6 @@ namespace HotRiot_CS
             }
             finally
             {
-                if (requestStream != null)
-                {
-                    requestStream.Dispose();
-                    requestStream.Close();
-                }
-                if (reader != null)
-                {
-                    reader.Dispose();
-                    reader.Close();
-                }
-                if (stream != null)
-                {
-                    stream.Dispose();
-                    stream.Close();
-                }
-                if (webResponse != null)
-                {
-                    webResponse.Dispose();
-                    webResponse.Close();
-                }
             }
 
             return jsonResponse;
@@ -143,11 +124,6 @@ namespace HotRiot_CS
 #pragma warning restore 1998
         {
             HotRiotJSON jsonResponse = null;
-            WebResponse webResponse = null;
-            FileStream fileStream = null;
-            Stream requestStream = null;
-            StreamReader reader = null;
-            Stream stream = null;
 
             try
             {
@@ -162,73 +138,79 @@ namespace HotRiot_CS
                 byte[] boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "\r\n");
                 string formdataTemplate = "Content-Disposition: form-data; name=\"{0}\";\r\n\r\n{1}";
 
-                requestStream = httpWebRequest.GetRequestStream();
-                foreach (string key in prp.nvc.Keys)
+                using (Stream requestStream = httpWebRequest.GetRequestStream())
                 {
-                    requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-                    string formitem = string.Format(formdataTemplate, key, prp.nvc[key]);
-                    byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
-                    requestStream.Write(formitembytes, 0, formitembytes.Length);
-                }
-
-                if (prp.files != null)
-                {
-                    if (putDocumentCredentials != null)
+                    foreach (string key in prp.nvc.Keys)
                     {
-                        ArrayList putObjectRequests = putObjectDirect(prp);
-
-                        // This call runs asynchronous with this method. T0
-                        // execute synchronous, apply the "await" operator.
-#pragma warning disable 4014
-                        putObjectDirectS3(putObjectRequests);
-#pragma warning restore 4014
-
-                        foreach (string key in prp.files.Keys)
+                        string[] entryValues = prp.nvc.GetValues(key);
+                        foreach (string entryValue in entryValues)
                         {
                             requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-                            string formitem = string.Format(formdataTemplate, key, "hsp-sharedfile=" + prp.files[key]);
+                            string formitem = string.Format(formdataTemplate, key, entryValue);
                             byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
                             requestStream.Write(formitembytes, 0, formitembytes.Length);
                         }
-                        requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-
                     }
-                    else
+
+                    if (prp.files != null)
                     {
-                        string headerTemplate = "Content-Disposition: form-data; name=\"{0}\"; filename=\"{1}\"\r\n Content-Type: application/octet-stream\r\n\r\n";
-                        requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-                        byte[] buffer = new byte[BUFFER_LENGTH];
-
-                        foreach (string key in prp.files.Keys)
+                        if (putDocumentCredentials != null)
                         {
-                            string header = string.Format(headerTemplate, key, prp.files[key]);
-                            byte[] headerbytes = System.Text.Encoding.UTF8.GetBytes(header);
-                            requestStream.Write(headerbytes, 0, headerbytes.Length);
+                            ArrayList putObjectRequests = putObjectDirect(prp);
 
-                            fileStream = new FileStream(prp.files[key], FileMode.Open, FileAccess.Read);
-                            int bytesRead = 0;
-                            while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) != 0)
-                                requestStream.Write(buffer, 0, bytesRead);
-                            boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
+                            // This call runs asynchronous with this method. T0
+                            // execute synchronous, apply the "await" operator.
+#pragma warning disable 4014
+                            putObjectDirectS3(putObjectRequests);
+#pragma warning restore 4014
+
+                            foreach (string key in prp.files.Keys)
+                            {
+                                requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+                                string formitem = string.Format(formdataTemplate, key, "hsp-sharedfile=" + prp.files[key]);
+                                byte[] formitembytes = System.Text.Encoding.UTF8.GetBytes(formitem);
+                                requestStream.Write(formitembytes, 0, formitembytes.Length);
+                            }
                             requestStream.Write(boundarybytes, 0, boundarybytes.Length);
 
-                            fileStream.Dispose();
-                            fileStream.Close();
-                            fileStream = null;
+                        }
+                        else
+                        {
+                            string headerTemplate = "Content-Disposition: form-data; name=\"{0}\"; filename=\"{1}\"\r\n Content-Type: application/octet-stream\r\n\r\n";
+                            requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+                            byte[] buffer = new byte[BUFFER_LENGTH];
+
+                            foreach (string key in prp.files.Keys)
+                            {
+                                string header = string.Format(headerTemplate, key, prp.files[key]);
+                                byte[] headerbytes = System.Text.Encoding.UTF8.GetBytes(header);
+                                requestStream.Write(headerbytes, 0, headerbytes.Length);
+
+                                using (FileStream fileStream = new FileStream(prp.files[key], FileMode.Open, FileAccess.Read))
+                                {
+                                    int bytesRead = 0;
+                                    while ((bytesRead = fileStream.Read(buffer, 0, buffer.Length)) != 0)
+                                        requestStream.Write(buffer, 0, bytesRead);
+                                    boundarybytes = System.Text.Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
+                                    requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+                                }
+                            }
+                        }
+                    }
+                    else
+                        requestStream.Write(boundarybytes, 0, boundarybytes.Length);
+                }
+
+                using (WebResponse webResponse = httpWebRequest.GetResponse())
+                {
+                    using (Stream stream = webResponse.GetResponseStream())
+                    {
+                        using (StreamReader reader = new StreamReader(stream))
+                        {
+                            jsonResponse = processResponse(reader.ReadToEnd());
                         }
                     }
                 }
-                else
-                    requestStream.Write(boundarybytes, 0, boundarybytes.Length);
-
-                requestStream.Dispose();
-                requestStream.Close();
-                requestStream = null;
-
-                webResponse = httpWebRequest.GetResponse();
-                stream = webResponse.GetResponseStream();
-                reader = new StreamReader(stream);
-                jsonResponse = processResponse(reader.ReadToEnd());
             }
             catch (WebException ex)
             {
@@ -268,31 +250,6 @@ namespace HotRiot_CS
             }
             finally
             {
-                if (fileStream != null)
-                {
-                    fileStream.Dispose();
-                    fileStream.Close();
-                }
-                if (requestStream != null)
-                {
-                    requestStream.Dispose();
-                    requestStream.Close();
-                }
-                if (reader != null)
-                {
-                    reader.Dispose();
-                    reader.Close();
-                }
-                if (stream != null)
-                {
-                    stream.Dispose();
-                    stream.Close();
-                }
-                if (webResponse != null)
-                {
-                    webResponse.Dispose();
-                    webResponse.Close();
-                }
             }
 
             return jsonResponse;
@@ -307,10 +264,6 @@ namespace HotRiot_CS
 
             byte[] response = new byte[bufferLength];
             HTTPProgress HTTPProgress = null;
-            WebResponse webResponse = null;
-            BinaryReader reader = null;
-            FileStream fStream = null;
-            Stream stream = null;
             int bytesRead = 0;
             int index = 0;
 
@@ -326,33 +279,41 @@ namespace HotRiot_CS
                 }
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
-                webResponse = request.GetResponse();
-                if (webResponse.ContentLength < bufferLength)
-                    bufferLength = webResponse.ContentLength;
-                stream = webResponse.GetResponseStream();
-                if (httpRequestProgressDelegate != null)
-                    HTTPProgress.TotalBytesToProcess = webResponse.ContentLength;
-
-                fStream = File.Create(filePath);
-                reader = new BinaryReader(stream);
-                while ((bytesRead = reader.Read(response, 0, (int)bufferLength)) != 0)
+                using (WebResponse webResponse = request.GetResponse())
                 {
-                    fStream.Write(response, 0, bytesRead);
-
-                    index += bytesRead;
-                    if (webResponse.ContentLength - index < bufferLength)
-                        bufferLength = webResponse.ContentLength - index;
-
-                    if (httpRequestProgressDelegate != null)
+                    if (webResponse.ContentLength < bufferLength)
+                        bufferLength = webResponse.ContentLength;
+                    using (Stream stream = webResponse.GetResponseStream())
                     {
-                        long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-                        HTTPProgress.BytesProcessed += bytesRead;
-                        HTTPProgress.TotalBytesProcessed = index;
-                        if (now - HTTPProgress.StartTime > HTTPProgress.ElapsTimeInMillis + 1000 || HTTPProgress.TotalBytesProcessed == HTTPProgress.TotalBytesToProcess)
+                        if (httpRequestProgressDelegate != null)
+                            HTTPProgress.TotalBytesToProcess = webResponse.ContentLength;
+
+                        using (FileStream fStream = File.Create(filePath))
                         {
-                            HTTPProgress.ElapsTimeInMillis = now - HTTPProgress.StartTime;
-                            httpRequestProgressDelegate(HTTPProgress);
-                            HTTPProgress.BytesProcessed = 0;
+                            using (BinaryReader reader = new BinaryReader(stream))
+                            {
+                                while ((bytesRead = reader.Read(response, 0, (int)bufferLength)) != 0)
+                                {
+                                    fStream.Write(response, 0, bytesRead);
+
+                                    index += bytesRead;
+                                    if (webResponse.ContentLength - index < bufferLength)
+                                        bufferLength = webResponse.ContentLength - index;
+
+                                    if (httpRequestProgressDelegate != null)
+                                    {
+                                        long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                                        HTTPProgress.BytesProcessed += bytesRead;
+                                        HTTPProgress.TotalBytesProcessed = index;
+                                        if (now - HTTPProgress.StartTime > HTTPProgress.ElapsTimeInMillis + 1000 || HTTPProgress.TotalBytesProcessed == HTTPProgress.TotalBytesToProcess)
+                                        {
+                                            HTTPProgress.ElapsTimeInMillis = now - HTTPProgress.StartTime;
+                                            httpRequestProgressDelegate(HTTPProgress);
+                                            HTTPProgress.BytesProcessed = 0;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -400,26 +361,6 @@ namespace HotRiot_CS
             }
             finally
             {
-                if (fStream != null)
-                {
-                    fStream.Dispose();
-                    fStream.Close();
-                }
-                if (reader != null)
-                {
-                    reader.Dispose();
-                    reader.Close();
-                }
-                if (stream != null)
-                {
-                    stream.Dispose();
-                    stream.Close();
-                }
-                if (webResponse != null)
-                {
-                    webResponse.Dispose();
-                    webResponse.Close();
-                }
             }
         }
 
@@ -429,9 +370,6 @@ namespace HotRiot_CS
         {
             HTTPProgress HTTPProgress = null;
             long bufferLength = BUFFER_LENGTH;
-            WebResponse webResponse = null;
-            BinaryReader reader = null;
-            Stream stream = null;
             byte[] response = null;
             int bytesRead = 0;
             int index = 0;
@@ -445,31 +383,37 @@ namespace HotRiot_CS
                 }
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
-                webResponse = request.GetResponse();
-                if (webResponse.ContentLength < bufferLength)
-                    bufferLength = webResponse.ContentLength;
-                response = new byte[webResponse.ContentLength];
-                stream = webResponse.GetResponseStream();
-                if (httpRequestProgressDelegate != null)
-                    HTTPProgress.TotalBytesToProcess = webResponse.ContentLength;
-
-                reader = new BinaryReader(stream);
-                while ((bytesRead = reader.Read(response, index, (int)bufferLength)) != 0)
+                using (WebResponse webResponse = request.GetResponse())
                 {
-                    index += bytesRead;
-                    if (webResponse.ContentLength - index < bufferLength)
-                        bufferLength = webResponse.ContentLength - index;
-
-                    if (httpRequestProgressDelegate != null)
+                    if (webResponse.ContentLength < bufferLength)
+                        bufferLength = webResponse.ContentLength;
+                    response = new byte[webResponse.ContentLength];
+                    using (Stream stream = webResponse.GetResponseStream())
                     {
-                        long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
-                        HTTPProgress.BytesProcessed += bytesRead;
-                        HTTPProgress.TotalBytesProcessed = index;
-                        if (now - HTTPProgress.StartTime > HTTPProgress.ElapsTimeInMillis + 1000 || HTTPProgress.TotalBytesProcessed == HTTPProgress.TotalBytesToProcess)
+                        if (httpRequestProgressDelegate != null)
+                            HTTPProgress.TotalBytesToProcess = webResponse.ContentLength;
+
+                        using (BinaryReader reader = new BinaryReader(stream))
                         {
-                            HTTPProgress.ElapsTimeInMillis = now - HTTPProgress.StartTime;
-                            httpRequestProgressDelegate(HTTPProgress);
-                            HTTPProgress.BytesProcessed = 0;
+                            while ((bytesRead = reader.Read(response, index, (int)bufferLength)) != 0)
+                            {
+                                index += bytesRead;
+                                if (webResponse.ContentLength - index < bufferLength)
+                                    bufferLength = webResponse.ContentLength - index;
+
+                                if (httpRequestProgressDelegate != null)
+                                {
+                                    long now = DateTime.UtcNow.Ticks / TimeSpan.TicksPerMillisecond;
+                                    HTTPProgress.BytesProcessed += bytesRead;
+                                    HTTPProgress.TotalBytesProcessed = index;
+                                    if (now - HTTPProgress.StartTime > HTTPProgress.ElapsTimeInMillis + 1000 || HTTPProgress.TotalBytesProcessed == HTTPProgress.TotalBytesToProcess)
+                                    {
+                                        HTTPProgress.ElapsTimeInMillis = now - HTTPProgress.StartTime;
+                                        httpRequestProgressDelegate(HTTPProgress);
+                                        HTTPProgress.BytesProcessed = 0;
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -505,21 +449,6 @@ namespace HotRiot_CS
             }
             finally
             {
-                if (reader != null)
-                {
-                    reader.Dispose();
-                    reader.Close();
-                }
-                if (stream != null)
-                {
-                    stream.Dispose();
-                    stream.Close();
-                }
-                if (webResponse != null)
-                {
-                    webResponse.Dispose();
-                    webResponse.Close();
-                }
             }
 
             return response;
@@ -530,20 +459,21 @@ namespace HotRiot_CS
 #pragma warning restore 1998
         {
             FileMetadata fileMetadata = new FileMetadata();
-            WebResponse webResponse = null;
 
             try
             {
                 HttpWebRequest request = (HttpWebRequest)WebRequest.Create(fileLink);
                 request.Method = "GET";
-                webResponse = request.GetResponse();
-                fileMetadata.ContentLength = webResponse.ContentLength;
-                fileMetadata.ContentType = webResponse.ContentType;
-                fileMetadata.IsFromCache = webResponse.IsFromCache;
+                using (WebResponse webResponse = request.GetResponse())
+                {
+                    fileMetadata.ContentLength = webResponse.ContentLength;
+                    fileMetadata.ContentType = webResponse.ContentType;
+                    fileMetadata.IsFromCache = webResponse.IsFromCache;
 
-                WebHeaderCollection WebHeadersCollection = webResponse.Headers;
-                fileMetadata.Date = WebHeadersCollection.Get("Date");
-                fileMetadata.LastModified = WebHeadersCollection.Get("Last-Modified");
+                    WebHeaderCollection WebHeadersCollection = webResponse.Headers;
+                    fileMetadata.Date = WebHeadersCollection.Get("Date");
+                    fileMetadata.LastModified = WebHeadersCollection.Get("Last-Modified");
+                }
             }
 
             catch (WebException ex)
@@ -576,11 +506,6 @@ namespace HotRiot_CS
             }
             finally
             {
-                if (webResponse != null)
-                {
-                    webResponse.Dispose();
-                    webResponse.Close();
-                }
             }
 
             return fileMetadata;
@@ -900,7 +825,7 @@ namespace HotRiot_CS
                 rollSessionParameters.Set("hsp-getFileFieldInfo", "hsp-getFileFieldInfo");
 
             HRRollSessionResponse hrRollSessionResponse = new HRRollSessionResponse(await postRequest(new PostRequestParam(fullyQualifiedHRURL, rollSessionParameters)));
-            if (hrRollSessionResponse.getResultCode() == 0)
+            if (hrRollSessionResponse.getResultCode() == HotRiot.SUCCESS)
             {
                 putDocumentCredentials = new PutDocumentCredentials();
 
@@ -2249,6 +2174,9 @@ namespace HotRiot_CS
         public const int CLOUD_MESSAGING_IO_EXCEPTION = 22;
         public const int CLOUD_MESSAGING_GENERAL_EXCEPTION = 23;
         public const int INVALID_CLOUD_MESSAGING_REQUEST = 24;
+        public const int INVALID_EDIT_KEY = 25;
+        public const int INVALID_DATABASE_NAME = 26;
+        public const int PARAMETER_COUNT_MISMATCH = 27;
     }
 
     public class RecordCountParameters
